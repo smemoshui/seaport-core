@@ -103,6 +103,8 @@ contract OrderFulfiller is BasicOrderFulfiller, CriteriaResolution, AmountDerive
         // Retrieve the order parameters after applying criteria resolvers.
         OrderParameters memory orderParameters = advancedOrders[0].parameters;
 
+        //在这里进行VRF的调用？
+
         // Perform each item transfer with the appropriate fractional amount.
         _applyFractionsAndTransferEach(orderParameters, fillNumerator, fillDenominator, fulfillerConduitKey, recipient);
 
@@ -316,6 +318,7 @@ contract OrderFulfiller is BasicOrderFulfiller, CriteriaResolution, AmountDerive
                 }
 
                 // Transfer item from caller to recipient specified by the item.
+                // 如果在中间插 这里应该也要改 msg.sender
                 _toConsiderationItemInput(_transfer)(considerationItem, msg.sender, fulfillerConduitKey, accumulator);
             }
         }

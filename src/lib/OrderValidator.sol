@@ -147,6 +147,7 @@ contract OrderValidator is Executor, ZoneInteraction {
 
         // Read numerator and denominator from memory and place on the stack.
         // Note that overflowed values are masked.
+        // 如果是basic order 不是advanced 那么这两个就都是1？需要看看parser
         assembly {
             numerator := and(mload(add(advancedOrder, AdvancedOrder_numerator_offset)), MaxUint120)
 
@@ -157,6 +158,7 @@ contract OrderValidator is Executor, ZoneInteraction {
         bool invalidFraction;
 
         // If the order is a contract order, return the generated order.
+        // 我们肯定不是这里了 我们就是full_open 0
         if (orderParameters.orderType == OrderType.CONTRACT) {
             // Ensure that the numerator and denominator are both equal to 1.
             assembly {
@@ -460,6 +462,7 @@ contract OrderValidator is Executor, ZoneInteraction {
         {
             address offerer = orderParameters.offerer;
             bool success;
+            // 这是什么东西？
             (MemoryPointer cdPtr, uint256 size) = _encodeGenerateOrder(orderParameters, context);
             assembly {
                 success := call(gas(), offerer, 0, cdPtr, size, 0, 0)

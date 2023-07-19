@@ -120,6 +120,8 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
             _revertMismatchedFulfillmentOfferAndConsiderationComponents(fulfillmentIndex);
         }
 
+        // 在这里进行修改 如果是match的话？
+
         // If total consideration amount exceeds the offer amount...
         if (considerationItem.amount > execution.item.amount) {
             // Retrieve the first consideration component from the fulfillment.

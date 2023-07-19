@@ -165,6 +165,7 @@ contract BasicOrderFulfiller is OrderValidator {
         // Utilize assembly to extract the order type and the basic order route.
         assembly {
             // Read basicOrderType from calldata.
+            // 这些地方如果要添加，就都要改了，需要完全的看懂整个数据结构的指针是怎么配置的
             let basicOrderType := calldataload(BasicOrder_basicOrderType_cdPtr)
 
             // Mask all but 2 least-significant bits to derive the order type.
@@ -227,7 +228,8 @@ contract BasicOrderFulfiller is OrderValidator {
                 // offeredItemType = route. Route is 0 or 1, it is route + 2.
                 offeredItemType := byte(route, BasicOrder_offeredItemByteMap)
             }
-
+            // 这里面很重要 如果要在外面弄的话 这个就要拆分了？
+            // 看起来这里不好动 虽然这里有fee 同时可以从两边收 但是感觉改这里不太行
             // Derive & validate order using parameters and update order status.
             orderHash = _prepareBasicFulfillmentFromCalldata(
                 parameters,
@@ -249,6 +251,8 @@ contract BasicOrderFulfiller is OrderValidator {
                 calldataload(add(BasicOrder_offererConduit_cdPtr, shl(OneWordShift, offerTypeIsAdditionalRecipientsType)))
         }
 
+        // 下面就开始直接转账了
+        // 这里呢？转账的时候少一点？直接返回一个比例，这个比例来决定真实转账多少
         // Transfer tokens based on the route.
         if (additionalRecipientsItemType == ItemType.NATIVE) {
             // Ensure neither consideration token nor identifier are set. Note
@@ -390,6 +394,7 @@ contract BasicOrderFulfiller is OrderValidator {
         // is within range.
         _assertValidBasicOrderParameters();
 
+        // 这里要看懂才行 可不可以通过修改consideration来实现价格不同？
         // Check for invalid time and missing original consideration items.
         // Utilize assembly so that constant calldata pointers can be applied.
         assembly {
