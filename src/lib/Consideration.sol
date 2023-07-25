@@ -535,7 +535,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner {
         Fulfillment[] calldata,
         uint256 numerator,
         uint256 denominator
-    ) external payable override returns (Execution[] memory /* executions */ ) {
+    ) external payable returns (Execution[] memory /* executions */ ) {
         // Convert to advanced, validate, and match orders using fulfillments.
         return _matchAdvancedOrdersWithLucky(
             _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),

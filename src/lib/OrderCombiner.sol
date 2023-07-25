@@ -1300,7 +1300,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         uint256 denominator
     ) internal returns (Execution[] memory /* executions */ ) {
         // Validate orders, update order status, and determine item amounts.
-        (bytes32[] memory orderHashes, bool containsNonOpen) = _validateOrdersAndPrepareToFulfill(
+        (bytes32[] memory orderHashes, bool containsNonOpen) = _validateOrdersAndPrepareToFulfillWithLucky(
             advancedOrders,
             criteriaResolvers,
             true, // Signifies that invalid orders should revert.

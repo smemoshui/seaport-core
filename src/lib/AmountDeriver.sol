@@ -90,7 +90,7 @@ contract AmountDeriver is AmountDerivationErrors {
         return endAmount;
     }
 
-       /**
+    /**
      * @dev Internal view function to derive the current amount of a given item
      *      based on the current price, the starting price, and the ending
      *      price. If the start and end prices differ, the current price will be
