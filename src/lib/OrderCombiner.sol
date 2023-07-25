@@ -495,9 +495,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
      *                          a root of zero indicates that any transferable
      *                          token identifier is valid and that no proof
      *                          needs to be supplied.
-     * @param revertOnInvalid   A boolean indicating whether to revert on any
-     *                          order being invalid; setting this to false will
-     *                          instead cause the invalid order to be skipped.
      * @param maximumFulfilled  The maximum number of orders to fulfill.
      * @param recipient         The intended recipient for all items that do not
      *                          already have a designated recipient and are not
@@ -511,7 +508,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
     function _validateOrdersAndPrepareToFulfillWithLucky(
         AdvancedOrder[] memory advancedOrders,
         CriteriaResolver[] memory criteriaResolvers,
-        bool revertOnInvalid,
         uint256 maximumFulfilled,
         address recipient,
         uint256 luckyNumerator,
@@ -580,11 +576,11 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // Continue iterating through the remaining orders.
                     continue;
                 }
-
+                {
                 // Validate it, update status, and determine fraction to fill.
                 (bytes32 orderHash, uint256 numerator, uint256 denominator) =
-                    _validateOrderAndUpdateStatus(advancedOrder, revertOnInvalid);
-
+                    _validateOrderAndUpdateStatus(advancedOrder, true);
+                }
                 // Do not track hash or adjust prices if order is not fulfilled.
                 if (numerator == 0) {
                     // Mark fill fraction as zero if the order is not fulfilled.
@@ -1303,7 +1299,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         (bytes32[] memory orderHashes, bool containsNonOpen) = _validateOrdersAndPrepareToFulfillWithLucky(
             advancedOrders,
             criteriaResolvers,
-            true, // Signifies that invalid orders should revert.
             advancedOrders.length,
             recipient,
             numerator,
