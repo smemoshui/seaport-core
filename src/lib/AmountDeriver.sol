@@ -102,8 +102,8 @@ contract AmountDeriver is AmountDerivationErrors {
      *
      * @param startAmount The starting amount of the item.
      * @param endAmount   The ending amount of the item.
-     * @param startTime   The starting time of the order.
-     * @param endTime     The end time of the order.
+     * @param luckyNumerator   The starting time of the order.
+     * @param luckyDenominator     The end time of the order.
      * @param roundUp     A boolean indicating whether the resultant amount
      *                    should be rounded up or down.
      *
