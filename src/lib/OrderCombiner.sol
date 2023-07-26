@@ -576,11 +576,9 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // Continue iterating through the remaining orders.
                     continue;
                 }
-                {
                 // Validate it, update status, and determine fraction to fill.
                 (bytes32 orderHash, uint256 numerator, uint256 denominator) =
                     _validateOrderAndUpdateStatus(advancedOrder, true);
-                }
                 // Do not track hash or adjust prices if order is not fulfilled.
                 if (numerator == 0) {
                     // Mark fill fraction as zero if the order is not fulfilled.
