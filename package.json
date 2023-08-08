@@ -14,6 +14,7 @@
     "README.md"
   ],
   "dependencies": {
+    "@openzeppelin/contracts": "^4.9.3",
     "seaport-types": "^0.0.1"
   }
 }

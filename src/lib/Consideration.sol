@@ -31,6 +31,8 @@ import {
     OrderParameters_counter_offset
 } from "seaport-types/src/lib/ConsiderationConstants.sol";
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
 /**
  * @title Consideration
  * @author 0age (0age.eth)
@@ -46,7 +48,7 @@ import {
  *         must be received back by the indicated recipients (the
  *         "consideration").
  */
-contract Consideration is ConsiderationInterface, OrderCombiner {
+contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     /**
      * @notice Derive and set hashes, reference chainId, and associated domain
      *         separator during deployment.
@@ -55,7 +57,11 @@ contract Consideration is ConsiderationInterface, OrderCombiner {
      *                          that may optionally be used to transfer approved
      *                          ERC20/721/1155 tokens.
      */
-    constructor(address conduitController) OrderCombiner(conduitController) {}
+
+    address vrf_controller;
+    constructor(address conduitController) OrderCombiner(conduitController) {
+        vrf_controller = address(0);
+    }
 
     /**
      * @notice Accept native token transfers during execution that may then be
@@ -333,7 +339,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner {
         Fulfillment[] calldata,
         uint256 numerator,
         uint256 denominator
-    ) external payable returns (Execution[] memory /* executions */ ) {
+    ) external onlyVRF payable returns (Execution[] memory /* executions */ ) {
         // Convert to advanced, validate, and match orders using fulfillments.
         return _matchAdvancedOrdersWithLucky(
             _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),
@@ -502,5 +508,14 @@ contract Consideration is ConsiderationInterface, OrderCombiner {
     function name() external pure override returns (string memory /* contractName */ ) {
         // Return the name of the contract.
         return _name();
+    }
+
+    modifier onlyVRF() {
+        require(msg.sender == vrf_controller);
+        _;
+    }
+
+    function updateVRFAddress(address vrfController) public onlyOwner {
+        vrf_controller = vrfController;
     }
 }
