@@ -49,6 +49,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  *         "consideration").
  */
 contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
+    address vrf_controller;
     /**
      * @notice Derive and set hashes, reference chainId, and associated domain
      *         separator during deployment.
@@ -57,8 +58,6 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
      *                          that may optionally be used to transfer approved
      *                          ERC20/721/1155 tokens.
      */
-
-    address vrf_controller;
     constructor(address conduitController) OrderCombiner(conduitController) {
         vrf_controller = address(0);
     }
