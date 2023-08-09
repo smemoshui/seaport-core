@@ -49,7 +49,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  *         "consideration").
  */
 contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
-    address vrf_controller;
+    address private _vrf_controller;
     /**
      * @notice Derive and set hashes, reference chainId, and associated domain
      *         separator during deployment.
@@ -59,7 +59,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
      *                          ERC20/721/1155 tokens.
      */
     constructor(address conduitController) OrderCombiner(conduitController) {
-        vrf_controller = address(0);
+        _vrf_controller = address(0);
     }
 
     /**
@@ -510,11 +510,15 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     }
 
     modifier onlyVRF() {
-        require(msg.sender == vrf_controller);
+        require(msg.sender == vrfOwner(), "Only vrf address can call the match with lucky");
         _;
     }
 
+    function vrfOwner() public view virtual returns (address) {
+        return _vrf_controller;
+    }
+
     function updateVRFAddress(address vrfController) public onlyOwner {
-        vrf_controller = vrfController;
+        _vrf_controller = vrfController;
     }
 }
