@@ -697,7 +697,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
             considerationExecution.offerer = address(0);
             considerationExecution.item.recipient = payable(0);
             considerationExecution.item.itemType = ItemType.ERC20;
-            return considerationExecution;
+            return (considerationExecution, 0);
         }
 
         // Recipient does not need to be specified because it will always be set
