@@ -33,6 +33,10 @@ import {
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+interface IVRFInterface {
+  function requestRandomWords() external returns (uint256 request_id);
+}
+
 /**
  * @title Consideration
  * @author 0age (0age.eth)
@@ -50,6 +54,9 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  */
 contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     address private _vrf_controller;
+    mapping(uint256 => Execution[]) private executionsMap;
+    mapping(uint256 => uint256[]) private considerationStartAmountsMap;
+    mapping(uint256 => address[]) private originalRecipientsMap;
     /**
      * @notice Derive and set hashes, reference chainId, and associated domain
      *         separator during deployment.
@@ -290,12 +297,22 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         Fulfillment[] calldata
     ) external payable override returns (Execution[] memory /* executions */ ) {
         // Convert to advanced, validate, and match orders using fulfillments.
-        return _matchAdvancedOrders(
+        (
+            Execution[] memory executions,
+            uint256[] memory considerationStartAmounts,
+            address[] memory originalRecipients
+        ) = _matchAdvancedOrdersWithRandom(
             _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),
             new CriteriaResolver[](0), // No criteria resolvers supplied.
             _toFulfillmentsReturnType(_decodeFulfillments)(CalldataStart.pptr(Offset_matchOrders_fulfillments)),
             msg.sender
         );
+
+        uint256 requestId = IVRFInterface(_vrf_controller).requestRandomWords();
+        executionsMap[requestId] = executions;
+        considerationStartAmountsMap[requestId] = considerationStartAmounts;
+        originalRecipientsMap[requestId] = originalRecipients;
+        return executions;
     }
 
     /**
