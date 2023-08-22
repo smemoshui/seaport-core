@@ -674,7 +674,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
         FulfillmentComponent[] memory offerComponents,
         FulfillmentComponent[] memory considerationComponents,
         uint256 fulfillmentIndex
-    ) internal pure returns (Execution memory execution, uint256 memory considerationStartAmount) {
+    ) internal pure returns (Execution memory execution, uint256 considerationStartAmount) {
         // Ensure 1+ of both offer and consideration components are supplied.
         if (offerComponents.length == 0 || considerationComponents.length == 0) {
             _revertOfferAndConsiderationRequiredOnFulfillment();
@@ -684,7 +684,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
         Execution memory considerationExecution;
 
         // Validate & aggregate consideration items to new Execution object.
-        _aggregateValidFulfillmentConsiderationItemsWithStartAmounts(advancedOrders, considerationComponents, considerationExecution, considerationStartAmount);
+        considerationStartAmount = _aggregateValidFulfillmentConsiderationItemsWithStartAmounts(advancedOrders, considerationComponents, considerationExecution);
 
         // Retrieve the consideration item from the execution struct.
         ReceivedItem memory considerationItem = considerationExecution.item;
@@ -752,7 +752,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
         execution.item.recipient = considerationItem.recipient;
 
         // Return the final execution that will be triggered for relevant items.
-        return execution; // Execution(considerationItem, offerer, conduitKey);
+        return (execution, considerationStartAmount); // Execution(considerationItem, offerer, conduitKey);
     }
 
 
@@ -778,9 +778,8 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
     function _aggregateValidFulfillmentConsiderationItemsWithStartAmounts(
         AdvancedOrder[] memory advancedOrders,
         FulfillmentComponent[] memory considerationComponents,
-        Execution memory execution,
-        uint256 memory considerationStartAmounts
-    ) internal pure {
+        Execution memory execution
+    ) internal pure returns (uint256 considerationStartAmounts) {
         // Utilize assembly in order to efficiently aggregate the items.
         assembly {
             // Declare a variable for the final aggregated item amount.

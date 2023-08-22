@@ -316,58 +316,6 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     }
 
     /**
-     * @notice Match an arbitrary number of orders, each with an arbitrary
-     *         number of items for offer and consideration along with a set of
-     *         fulfillments allocating offer components to consideration
-     *         components. Note that this function does not support
-     *         criteria-based or partial filling of orders (though filling the
-     *         remainder of a partially-filled order is supported). Any unspent
-     *         offer item amounts or native tokens will be transferred to the
-     *         caller.
-     *
-     * @custom:param orders       The orders to match. Note that both the
-     *                            offerer and fulfiller on each order must first
-     *                            approve this contract (or their conduit if
-     *                            indicated by the order) to transfer any
-     *                            relevant tokens on their behalf and each
-     *                            consideration recipient must implement
-     *                            `onERC1155Received` to receive ERC1155 tokens.
-     * @custom:param fulfillments An array of elements allocating offer
-     *                            components to consideration components. Note
-     *                            that each consideration component must be
-     *                            fully met for the match operation to be valid,
-     *                            and that any unspent offer items will be sent
-     *                            unaggregated to the caller.
-     *
-     * @return executions An array of elements indicating the sequence of
-     *                    transfers performed as part of matching the given
-     *                    orders. Note that unspent offer item amounts or native
-     *                    tokens will not be reflected as part of this array.
-     */
-    function matchOrdersWithLucky(
-        /**
-         * @custom:name orders
-         */
-        Order[] calldata,
-        /**
-         * @custom:name fulfillments
-         */
-        Fulfillment[] calldata,
-        uint256 numerator,
-        uint256 denominator
-    ) external onlyVRF payable returns (Execution[] memory /* executions */ ) {
-        // Convert to advanced, validate, and match orders using fulfillments.
-        return _matchAdvancedOrdersWithLucky(
-            _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),
-            new CriteriaResolver[](0), // No criteria resolvers supplied.
-            _toFulfillmentsReturnType(_decodeFulfillments)(CalldataStart.pptr(Offset_matchOrders_fulfillments)),
-            msg.sender,
-            numerator,
-            denominator
-        );
-    }
-
-    /**
      * @notice Cancel an arbitrary number of orders. Note that only the offerer
      *         or the zone of a given order may cancel it. Callers should ensure
      *         that the intended order was cancelled by calling `getOrderStatus`
