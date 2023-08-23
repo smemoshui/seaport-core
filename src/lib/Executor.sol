@@ -509,8 +509,8 @@ contract Executor is Verifiers, TokenTransferrer {
             // Transfer ERC20 tokens from the source to the recipient.
             safeTransferERC20(item.token, from, item.recipient, item.amount);
         } else if (item.itemType == ItemType.ERC721) {
-            if (amount != 1) {
-                _revertInvalidERC721TransferAmount(amount);
+            if (item.amount != 1) {
+                _revertInvalidERC721TransferAmount(item.amount);
             }
 
             // Perform transfer via the token contract directly.
