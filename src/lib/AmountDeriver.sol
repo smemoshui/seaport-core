@@ -90,36 +90,16 @@ contract AmountDeriver is AmountDerivationErrors {
         return endAmount;
     }
 
-    /**
-     * @dev Internal view function to derive the current amount of a given item
-     *      based on the current price, the starting price, and the ending
-     *      price. If the start and end prices differ, the current price will be
-     *      interpolated on a linear basis. Note that this function expects that
-     *      the startTime parameter of orderParameters is not greater than the
-     *      current block timestamp and that the endTime parameter is greater
-     *      than the current block timestamp. If this condition is not upheld,
-     *      duration / elapsed / remaining variables will underflow.
-     *
-     * @param startAmount The starting amount of the item.
-     * @param endAmount   The ending amount of the item.
-     * @param luckyNumerator   The starting time of the order.
-     * @param luckyDenominator     The end time of the order.
-     * @param roundUp     A boolean indicating whether the resultant amount
-     *                    should be rounded up or down.
-     *
-     * @return amount The current amount.
-     */
-    function _locateLuckyAmount(
+    function _locateRandomAmount(
         uint256 startAmount,
         uint256 endAmount,
-        uint256 luckyNumerator,
-        uint256 luckyDenominator,
-        bool roundUp
-    ) internal view returns (uint256 amount) {
+        uint256 numerator,
+        uint256 denominator
+    ) internal view returns (uint256 amount, uint256 payback) {
         // Only modify end amount if it doesn't already equal start amount.
         if (startAmount != endAmount) {
             // Aggregate new amounts weighted by time with rounding factor.
-            uint256 totalBeforeDivision = ((startAmount * luckyDenominator) + (endAmount * luckyNumerator) - (startAmount * luckyNumerator));
+            uint256 totalBeforeDivision = ((startAmount * denominator) + (endAmount * numerator) - (startAmount * numerator));
 
             // Use assembly to combine operations and skip divide-by-zero check.
             assembly {
@@ -133,16 +113,16 @@ contract AmountDeriver is AmountDerivationErrors {
                         // roundUp is true to get the proper rounding direction.
                         // Division is performed with no zero check as duration
                         // cannot be zero as long as startTime < endTime.
-                        add(div(sub(totalBeforeDivision, roundUp), luckyDenominator), roundUp)
+                        add(div(sub(totalBeforeDivision, true), denominator), true)
                     )
             }
 
             // Return the current amount.
-            return amount;
+            return (amount, endAmount - amount);
         }
 
         // Return the original amount as startAmount == endAmount.
-        return endAmount;
+        return (endAmount, 0);
     }
 
     /**

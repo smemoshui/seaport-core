@@ -48,6 +48,8 @@ import {
     _revertUnusedItemParameters
 } from "seaport-types/src/lib/ConsiderationErrors.sol";
 
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 /**
  * @title Executor
  * @author 0age
@@ -485,6 +487,54 @@ contract Executor is Verifiers, TokenTransferrer {
             mstore(add(itemPointer, Conduit_transferItem_to_ptr), to)
             mstore(add(itemPointer, Conduit_transferItem_identifier_ptr), identifier)
             mstore(add(itemPointer, Conduit_transferItem_amount_ptr), amount)
+        }
+    }
+
+    function _transferFromPool(ReceivedItem memory item, address from) internal {
+        // If the item type indicates Ether or a native token...
+        if (item.itemType == ItemType.NATIVE) {
+            // Ensure neither the token nor the identifier parameters are set.
+            if ((uint160(item.token) | item.identifier) != 0) {
+                _revertUnusedItemParameters();
+            }
+
+            // transfer the native tokens to the recipient.
+            _transferNativeTokens(item.recipient, item.amount);
+        } else if (item.itemType == ItemType.ERC20) {
+            // Ensure that no identifier is supplied.
+            if (item.identifier != 0) {
+                _revertUnusedItemParameters();
+            }
+
+            // Transfer ERC20 tokens from the source to the recipient.
+            safeTransferERC20(item.token, from, item.recipient, item.amount);
+        } else if (item.itemType == ItemType.ERC721) {
+            if (amount != 1) {
+                _revertInvalidERC721TransferAmount(amount);
+            }
+
+            // Perform transfer via the token contract directly.
+            _performERC721Transfer(item.token, from, item.recipient, item.identifier);
+        } else {
+            // Transfer ERC1155 token from the source to the recipient.
+            _performERC1155Transfer(item.token, from, item.recipient, item.identifier, item.amount);
+        }
+    }
+
+    function safeTransferERC20(
+        address _currency,
+        address _from,
+        address _to,
+        uint256 _amount
+    ) internal {
+        if (_from == _to) {
+            return;
+        }
+
+        if (_from == address(this)) {
+            IERC20(_currency).safeTransfer(_to, _amount);
+        } else {
+            IERC20(_currency).safeTransferFrom(_from, _to, _amount);
         }
     }
 }

@@ -11,7 +11,8 @@ import {
     Fulfillment,
     FulfillmentComponent,
     Order,
-    OrderComponents
+    OrderComponents,
+    ReceivedItem
 } from "seaport-types/src/lib/ConsiderationStructs.sol";
 
 import {OrderCombiner} from "./OrderCombiner.sol";
@@ -313,6 +314,37 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         considerationStartAmountsMap[requestId] = considerationStartAmounts;
         originalRecipientsMap[requestId] = originalRecipients;
         return executions;
+    }
+
+    function execute(
+        uint256 requestId,
+        uint256 numerator,
+        uint256 denominator
+    ) external {
+        require(msg.sender == _vrf_controller, "Caller is not VRF Controller");
+        Execution[] memory executions = executionsMap[requestId];
+        uint256[] memory considerationStartAmounts = considerationStartAmountsMap[requestId];
+        address[] memory originalRecipients = originalRecipientsMap[requestId];
+        uint256 totalExecutions = executions.length;
+        for (uint256 i = 0; i < totalExecutions; ++i) {
+            Execution memory execution = executions[i];
+            uint256 considerationStartAmount = considerationStartAmounts[i];
+            address originalRecipient = originalRecipients[i];
+            (uint256 lastAmount, uint256 payback) = _locateRandomAmount(
+                considerationStartAmount,
+                execution.item.amount,
+                numerator,
+                denominator
+            );
+            ReceivedItem memory toRecipient = execution.item;
+            toRecipient.amount = lastAmount;
+            toRecipient.recipient = originalRecipient;
+            _transferFromPool(toRecipient, address(this));
+            ReceivedItem memory toOfferer = execution.item;
+            toOfferer.amount = payback;
+            toOfferer.recipient = execution.offerer;
+            _transferFromPool(toOfferer, address(this));
+        }
     }
 
     /**
