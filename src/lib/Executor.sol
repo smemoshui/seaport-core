@@ -49,6 +49,7 @@ import {
 } from "seaport-types/src/lib/ConsiderationErrors.sol";
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+using SafeERC20 for IERC20;
 
 /**
  * @title Executor
