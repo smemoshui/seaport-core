@@ -487,11 +487,11 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         _vrf_controller = vrfController;
     }
 
-    function getConsiderationStartAmountsMap(uint256 requestId) external view returns (uint256[]) {
+    function getConsiderationStartAmountsMap(uint256 requestId) external view returns (uint256[] memory) {
         return considerationStartAmountsMap[requestId];
     }
 
-    function getOriginalRecipientsMap(uint256 requestId) external view returns (address[]) {
+    function getOriginalRecipientsMap(uint256 requestId) external view returns (address[] memory) {
         return originalRecipientsMap[requestId];
     }
 }
