@@ -144,7 +144,6 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         uint256 numerator,
         uint256 denominator
     ) external {
-        require(msg.sender == _vrf_controller, "Caller is not VRF Controller");
         Execution[] memory executions = executionsMap[requestId];
         uint256[] memory considerationStartAmounts = considerationStartAmountsMap[requestId];
         address[] memory originalRecipients = originalRecipientsMap[requestId];
