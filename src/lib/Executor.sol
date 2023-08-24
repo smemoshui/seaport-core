@@ -48,8 +48,35 @@ import {
     _revertUnusedItemParameters
 } from "seaport-types/src/lib/ConsiderationErrors.sol";
 
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-using SafeERC20 for IERC20;
+interface IERC20 {
+    /**
+     * @dev Emitted when `value` tokens are moved from one account (`from`) to
+     * another (`to`).
+     *
+     * Note that `value` may be zero.
+     */
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    /**
+     * @dev Moves `amount` tokens from the caller's account to `to`.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transfer(address to, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Moves `amount` tokens from `from` to `to` using the
+     * allowance mechanism. `amount` is then deducted from the caller's
+     * allowance.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+}
 
 /**
  * @title Executor
@@ -533,9 +560,9 @@ contract Executor is Verifiers, TokenTransferrer {
         }
 
         if (_from == address(this)) {
-            IERC20(_currency).safeTransfer(_to, _amount);
+            IERC20(_currency).transfer(_to, _amount);
         } else {
-            IERC20(_currency).safeTransferFrom(_from, _to, _amount);
+            IERC20(_currency).transferFrom(_from, _to, _amount);
         }
     }
 }
