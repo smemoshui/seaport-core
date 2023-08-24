@@ -158,14 +158,18 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
                 numerator,
                 denominator
             );
-            ReceivedItem memory toRecipient = execution.item;
-            toRecipient.amount = lastAmount;
-            toRecipient.recipient = payable(originalRecipient);
-            _transferFromPool(toRecipient, address(this));
-            ReceivedItem memory toOfferer = execution.item;
-            toOfferer.amount = payback;
-            toOfferer.recipient = payable(execution.offerer);
-            _transferFromPool(toOfferer, address(this));
+            if(lastAmount != 0){
+                ReceivedItem memory toRecipient = execution.item;
+                toRecipient.amount = lastAmount;
+                toRecipient.recipient = payable(originalRecipient);
+                _transferFromPool(toRecipient, address(this));
+            }
+            if(payback != 0){
+                ReceivedItem memory toOfferer = execution.item;
+                toOfferer.amount = payback;
+                toOfferer.recipient = payable(execution.offerer);
+                _transferFromPool(toOfferer, address(this));
+            }
         }
     }
 
