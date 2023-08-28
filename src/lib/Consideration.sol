@@ -35,7 +35,14 @@ import {
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IVRFInterface {
-  function requestRandomWords() external returns (uint256 request_id);
+  function (
+        ReceivedItem memory premium,
+        uint256 startAmount,
+        uint256 endAmount,
+        address offerer,
+        bytes32 conduitKey,
+        uint256 limit
+    ) external returns (uint256 requestId);
 }
 
 /**
@@ -114,12 +121,23 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         /**
          * @custom:name orders
          */
-        Order[] calldata,
+        Order[] calldata orders,
         /**
          * @custom:name fulfillments
          */
-        Fulfillment[] calldata
+        Fulfillment[] calldata,
+        uint256 limit,
+        bytes _limitSig
     ) external payable override returns (Execution[] memory /* executions */ ) {
+        (
+            ReceivedItem memory premium,
+            uint256 startAmount,
+            uint256 endAmount
+        ) = _buildPremium(orders[1], orders[0].parameters.offerer);
+
+        address offerer = orders[1].parameters.offerer;
+        bytes32 conduitKey = orders[1].parameters.conduitKey;
+
         // Convert to advanced, validate, and match orders using fulfillments.
         (
             Execution[] memory executions,
@@ -132,18 +150,32 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
             msg.sender
         );
 
-        uint256 requestId = IVRFInterface(_vrf_controller).requestRandomWords();
+        uint256 requestId = IVRFInterface(_vrf_controller).requestRandomWords(premium, startAmount, endAmount, offerer, conduitKey, limit);
         executionsMap[requestId] = executions;
         considerationStartAmountsMap[requestId] = considerationStartAmounts;
         originalRecipientsMap[requestId] = originalRecipients;
         return executions;
     }
 
+    function _buildPremium(
+        Order calldata takerOrder,
+        address recipient
+    ) internal returns (ReceivedItem memory premium, uint256 startAmount, uint256 endAmount) {
+        ReceivedItem memory premium;
+        premium.itemType = takerOrder.parameters.offer[0].itemType;
+        premium.token = takerOrder.parameters.offer[0].token;
+        premium.identifier = takerOrder.parameters.offer[0].identifierOrCriteria;
+        premium.recipient = recipient;
+        premium.amount = takerOrder.parameters.offer[0].startAmount;
+
+        return(premium, takerOrder.parameters.offer[0].startAmount, takerOrder.parameters.offer[0].endAmount);
+    }
+
     function execute(
         uint256 requestId,
         uint256 numerator,
         uint256 denominator
-    ) external {
+    ) external onlyVRF {
         Execution[] memory executions = executionsMap[requestId];
         uint256[] memory considerationStartAmounts = considerationStartAmountsMap[requestId];
         address[] memory originalRecipients = originalRecipientsMap[requestId];
@@ -337,7 +369,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         _;
     }
 
-    function vrfOwner() public view virtual returns (address) {
+    function vrfOwner() public view returns (address) {
         return _vrf_controller;
     }
 
