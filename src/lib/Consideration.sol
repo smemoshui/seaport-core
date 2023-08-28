@@ -35,7 +35,7 @@ import {
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IVRFInterface {
-  function (
+  function requestRandomWords(
         ReceivedItem memory premium,
         uint256 startAmount,
         uint256 endAmount,
@@ -127,7 +127,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
          */
         Fulfillment[] calldata,
         uint256 limit,
-        bytes _limitSig
+        bytes calldata _limitSig
     ) external payable override returns (Execution[] memory /* executions */ ) {
         (
             ReceivedItem memory premium,
@@ -161,11 +161,10 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         Order calldata takerOrder,
         address recipient
     ) internal returns (ReceivedItem memory premium, uint256 startAmount, uint256 endAmount) {
-        ReceivedItem memory premium;
         premium.itemType = takerOrder.parameters.offer[0].itemType;
         premium.token = takerOrder.parameters.offer[0].token;
         premium.identifier = takerOrder.parameters.offer[0].identifierOrCriteria;
-        premium.recipient = recipient;
+        premium.recipient = payable(recipient);
         premium.amount = takerOrder.parameters.offer[0].startAmount;
 
         return(premium, takerOrder.parameters.offer[0].startAmount, takerOrder.parameters.offer[0].endAmount);
