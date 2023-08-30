@@ -1427,7 +1427,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         CriteriaResolver[] memory criteriaResolvers,
         Fulfillment[] memory fulfillments,
         address recipient
-    ) internal returns (Execution[] memory executions, uint256[] memory considerationStartAmounts, address[] memory originalRecipients) {
+    ) internal returns (Execution[] memory executions, uint256[] memory considerationStartAmounts, address[] memory originalRecipients, bytes32[] memory) {
         // Validate orders, update order status, and determine item amounts.
         (   
             bytes32[] memory orderHashes,
@@ -1477,7 +1477,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         bytes32[] memory orderHashes,
         address recipient,
         bool containsNonOpen
-    ) internal returns (Execution[] memory executions, uint256[] memory considerationStartAmounts, address[] memory originalRecipients) {
+    ) internal returns (Execution[] memory executions, uint256[] memory considerationStartAmounts, address[] memory originalRecipients, bytes32[] memory) {
         // Retrieve fulfillments array length and place on the stack.
         uint256 totalFulfillments = fulfillments.length;
 
@@ -1534,7 +1534,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         _performFinalChecksAndExecuteOrdersWithRandom(advancedOrders, executions, orderHashes, recipient, containsNonOpen);
 
         // Return the executions array.
-        return (executions, considerationStartAmounts, originalRecipients);
+        return (executions, considerationStartAmounts, originalRecipients, orderHashes);
     }
 
     /**

@@ -797,6 +797,12 @@ contract OrderValidator is Executor, ZoneInteraction {
         return (contractOrderHash, 0, 0);
     }
 
+    function _clearOrderStatus(bytes32 orderHash)
+        internal
+    {
+        delete _orderStatus[orderHash];
+    }
+
     /**
      * @dev Internal pure function to check whether a given order type indicates
      *      that partial fills are not supported (e.g. only "full fills" are

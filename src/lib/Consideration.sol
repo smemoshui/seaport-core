@@ -65,6 +65,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     mapping(uint256 => Execution[]) private executionsMap;
     mapping(uint256 => uint256[]) private considerationStartAmountsMap;
     mapping(uint256 => address[]) private originalRecipientsMap;
+    mapping(uint256 => bytes32[]) private originalOrderHashes;
     /**
      * @notice Derive and set hashes, reference chainId, and associated domain
      *         separator during deployment.
@@ -142,7 +143,8 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         (
             Execution[] memory executions,
             uint256[] memory considerationStartAmounts,
-            address[] memory originalRecipients
+            address[] memory originalRecipients,
+            bytes32[] memory orderHashes
         ) = _matchAdvancedOrdersWithRandom(
             _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),
             new CriteriaResolver[](0), // No criteria resolvers supplied.
@@ -154,6 +156,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         executionsMap[requestId] = executions;
         considerationStartAmountsMap[requestId] = considerationStartAmounts;
         originalRecipientsMap[requestId] = originalRecipients;
+        originalOrderHashes[requestId] = orderHashes;
         return executions;
     }
 
@@ -202,6 +205,20 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
                 _transferFromPool(toOfferer, address(this));
             }
         }
+        // reset the state
+        if(denominator == 0) {
+            bytes32[] memory orderHashes = originalOrderHashes[requestId];
+            uint256 totalLength = orderHashes.length;
+            for(uint256 i = 0; i < totalLength; ++i) {
+                _clearOrderStatus(orderHashes[i]);
+            }
+        }
+
+        // delete the state
+        delete executionsMap[requestId];
+        delete considerationStartAmountsMap[requestId];
+        delete originalRecipientsMap[requestId];
+        delete originalOrderHashes[requestId];
     }
 
     /**

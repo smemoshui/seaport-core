@@ -96,6 +96,10 @@ contract AmountDeriver is AmountDerivationErrors {
         uint256 numerator,
         uint256 denominator
     ) internal view returns (uint256 amount, uint256 payback) {
+        // If denominator is zero => limit order can cancel this order
+        if(denominator == 0) {
+            return (0, endAmount);
+        }
         // Only modify end amount if it doesn't already equal start amount.
         if (startAmount != endAmount) {
             // Aggregate new amounts weighted by time with rounding factor.
