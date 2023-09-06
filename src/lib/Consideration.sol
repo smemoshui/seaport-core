@@ -345,12 +345,4 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     function updateVRFAddress(address vrfController) public onlyOwner {
         _vrf_controller = vrfController;
     }
-
-    function getConsiderationStartAmountsMap(uint256 requestId) external view returns (uint256[] memory) {
-        return considerationStartAmountsMap[requestId];
-    }
-
-    function getOriginalRecipientsMap(uint256 requestId) external view returns (address[] memory) {
-        return originalRecipientsMap[requestId];
-    }
 }
