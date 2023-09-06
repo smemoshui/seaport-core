@@ -35,14 +35,7 @@ import {
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IVRFInterface {
-  function requestRandomWords(
-        ReceivedItem memory premium,
-        uint256 startAmount,
-        uint256 endAmount,
-        address offerer,
-        bytes32 conduitKey,
-        uint256 limit
-    ) external returns (uint256 requestId);
+  function requestRandomWords() external returns (uint256 requestId);
 }
 
 /**
@@ -62,9 +55,7 @@ interface IVRFInterface {
  */
 contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     address private _vrf_controller;
-    mapping(uint256 => Execution[]) private executionsMap;
-    mapping(uint256 => uint256[]) private considerationStartAmountsMap;
-    mapping(uint256 => address[]) private originalRecipientsMap;
+    mapping(uint256 => Fulfillment[]) private originalFulfillments;
     mapping(uint256 => bytes32[]) private originalOrderHashes;
     /**
      * @notice Derive and set hashes, reference chainId, and associated domain
@@ -118,7 +109,39 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
      *                    orders. Note that unspent offer item amounts or native
      *                    tokens will not be reflected as part of this array.
      */
-    function matchOrders(
+    function matchOrdersWithRandom(
+        /**
+         * @custom:name orders
+         */
+        Order[] calldata,
+        uint256 requestId,
+        uint256 numerator,
+        uint256 denominator
+    ) external payable override returns (Execution[] memory /* executions */ ) {
+
+        Fulfillment[] memory fulfillments = originalFulfillments[requestId];
+        bytes32[] memory existingOrderHahes = originalOrderHashes[requestId];
+        (Execution[] memory executions, bool returnBack) = _matchAdvancedOrdersWithRandom(
+            _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),
+            fulfillments,
+            existingOrderHahes,
+            msg.sender,
+            numerator,
+            denominator
+        );
+        // change this if need partial fulfillment
+        if(returnBack) {
+            uint256 totalLength = existingOrderHahes.length;
+            for(uint256 i = 0; i < totalLength; ++i) {
+                _clearOrderStatus(existingOrderHahes[i]);
+            }
+        }
+        delete originalFulfillments[requestId];
+        delete originalOrderHashes[requestId];
+        return executions;
+    }
+
+    function prepare(
         /**
          * @custom:name orders
          */
@@ -127,98 +150,28 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
          * @custom:name fulfillments
          */
         Fulfillment[] calldata,
-        uint256 limit,
-        bytes calldata _limitSig
-    ) external payable override returns (Execution[] memory /* executions */ ) {
-        (
-            ReceivedItem memory premium,
-            uint256 startAmount,
-            uint256 endAmount
-        ) = _buildPremium(orders[1], orders[0].parameters.offerer);
-
-        address offerer = orders[1].parameters.offerer;
-        bytes32 conduitKey = orders[1].parameters.conduitKey;
+        uint256 premium,
+        bytes calldata _premiumSig
+    ) external payable override returns (bytes32[] memory /* orderHashes */ ) {
 
         // Convert to advanced, validate, and match orders using fulfillments.
+
+        Fulfillment[] memory fulfillments = _toFulfillmentsReturnType(_decodeFulfillments)(CalldataStart.pptr(Offset_matchOrders_fulfillments));
         (
             Execution[] memory executions,
-            uint256[] memory considerationStartAmounts,
-            address[] memory originalRecipients,
             bytes32[] memory orderHashes
-        ) = _matchAdvancedOrdersWithRandom(
+        ) = prepareOrdersWithRandom(
             _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),
-            new CriteriaResolver[](0), // No criteria resolvers supplied.
-            _toFulfillmentsReturnType(_decodeFulfillments)(CalldataStart.pptr(Offset_matchOrders_fulfillments)),
-            msg.sender
+            fulfillments,
+            premium
         );
 
-        uint256 requestId = IVRFInterface(_vrf_controller).requestRandomWords(premium, startAmount, endAmount, offerer, conduitKey, limit);
-        executionsMap[requestId] = executions;
-        considerationStartAmountsMap[requestId] = considerationStartAmounts;
-        originalRecipientsMap[requestId] = originalRecipients;
+        uint256 requestId = IVRFInterface(_vrf_controller).requestRandomWords();
+        // clear reetrancy guard
+        _clearReentrancyGuard();
         originalOrderHashes[requestId] = orderHashes;
-        return executions;
-    }
-
-    function _buildPremium(
-        Order calldata takerOrder,
-        address recipient
-    ) internal returns (ReceivedItem memory premium, uint256 startAmount, uint256 endAmount) {
-        premium.itemType = takerOrder.parameters.offer[0].itemType;
-        premium.token = takerOrder.parameters.offer[0].token;
-        premium.identifier = takerOrder.parameters.offer[0].identifierOrCriteria;
-        premium.recipient = payable(recipient);
-        premium.amount = takerOrder.parameters.offer[0].startAmount;
-
-        return(premium, takerOrder.parameters.offer[0].startAmount, takerOrder.parameters.offer[0].endAmount);
-    }
-
-    function execute(
-        uint256 requestId,
-        uint256 numerator,
-        uint256 denominator
-    ) external onlyVRF {
-        Execution[] memory executions = executionsMap[requestId];
-        uint256[] memory considerationStartAmounts = considerationStartAmountsMap[requestId];
-        address[] memory originalRecipients = originalRecipientsMap[requestId];
-        uint256 totalExecutions = executions.length;
-        for (uint256 i = 0; i < totalExecutions; ++i) {
-            Execution memory execution = executions[i];
-            uint256 considerationStartAmount = considerationStartAmounts[i];
-            address originalRecipient = originalRecipients[i];
-            (uint256 lastAmount, uint256 payback) = _locateRandomAmount(
-                considerationStartAmount,
-                execution.item.amount,
-                numerator,
-                denominator
-            );
-            if(lastAmount != 0){
-                ReceivedItem memory toRecipient = execution.item;
-                toRecipient.amount = lastAmount;
-                toRecipient.recipient = payable(originalRecipient);
-                _transferFromPool(toRecipient, address(this));
-            }
-            if(payback != 0){
-                ReceivedItem memory toOfferer = execution.item;
-                toOfferer.amount = payback;
-                toOfferer.recipient = payable(execution.offerer);
-                _transferFromPool(toOfferer, address(this));
-            }
-        }
-        // reset the state
-        if(denominator == 0) {
-            bytes32[] memory orderHashes = originalOrderHashes[requestId];
-            uint256 totalLength = orderHashes.length;
-            for(uint256 i = 0; i < totalLength; ++i) {
-                _clearOrderStatus(orderHashes[i]);
-            }
-        }
-
-        // delete the state
-        delete executionsMap[requestId];
-        delete considerationStartAmountsMap[requestId];
-        delete originalRecipientsMap[requestId];
-        delete originalOrderHashes[requestId];
+        originalFulfillments[requestId] = fulfillments;
+        return orderHashes;
     }
 
     /**

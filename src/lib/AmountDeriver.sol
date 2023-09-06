@@ -130,6 +130,61 @@ contract AmountDeriver is AmountDerivationErrors {
     }
 
     /**
+     * @dev Internal view function to derive the current amount of a given item
+     *      based on the current price, the starting price, and the ending
+     *      price. If the start and end prices differ, the current price will be
+     *      interpolated on a linear basis. Note that this function expects that
+     *      the startTime parameter of orderParameters is not greater than the
+     *      current block timestamp and that the endTime parameter is greater
+     *      than the current block timestamp. If this condition is not upheld,
+     *      duration / elapsed / remaining variables will underflow.
+     *
+     * @param startAmount The starting amount of the item.
+     * @param endAmount   The ending amount of the item.
+     * @param luckyNumerator   The starting time of the order.
+     * @param luckyDenominator     The end time of the order.
+     * @param roundUp     A boolean indicating whether the resultant amount
+     *                    should be rounded up or down.
+     *
+     * @return amount The current amount.
+     */
+    function _locateLuckyAmount(
+        uint256 startAmount,
+        uint256 endAmount,
+        uint256 luckyNumerator,
+        uint256 luckyDenominator,
+        bool roundUp
+    ) internal view returns (uint256 amount) {
+        // Only modify end amount if it doesn't already equal start amount.
+        if (startAmount != endAmount) {
+            // Aggregate new amounts weighted by time with rounding factor.
+            uint256 totalBeforeDivision = ((startAmount * luckyDenominator) + (endAmount * luckyNumerator) - (startAmount * luckyNumerator));
+
+            // Use assembly to combine operations and skip divide-by-zero check.
+            assembly {
+                // Multiply by iszero(iszero(totalBeforeDivision)) to ensure
+                // amount is set to zero if totalBeforeDivision is zero,
+                // as intermediate overflow can occur if it is zero.
+                amount :=
+                    mul(
+                        iszero(iszero(totalBeforeDivision)),
+                        // Subtract 1 from the numerator and add 1 to the result if
+                        // roundUp is true to get the proper rounding direction.
+                        // Division is performed with no zero check as duration
+                        // cannot be zero as long as startTime < endTime.
+                        add(div(sub(totalBeforeDivision, roundUp), luckyDenominator), roundUp)
+                    )
+            }
+
+            // Return the current amount.
+            return amount;
+        }
+
+        // Return the original amount as startAmount == endAmount.
+        return endAmount;
+    }
+
+    /**
      * @dev Internal pure function to return a fraction of a given value and to
      *      ensure the resultant value does not have any fractional component.
      *      Note that this function assumes that zero will never be supplied as

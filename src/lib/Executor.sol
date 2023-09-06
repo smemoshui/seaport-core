@@ -518,7 +518,7 @@ contract Executor is Verifiers, TokenTransferrer {
         }
     }
 
-    function _transferFromPool(ReceivedItem memory item, address from) internal {
+    function _transferFromPool(ReceivedItem memory item, address from, bytes32 _mockConduitKey, bytes memory _mockAccumulator) internal {
         // If the item type indicates Ether or a native token...
         if (item.itemType == ItemType.NATIVE) {
             // Ensure neither the token nor the identifier parameters are set.
