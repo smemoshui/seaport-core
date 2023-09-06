@@ -477,7 +477,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
     }
 
 
-        /**
+     /**
      * @dev Internal function to validate a group of orders, update their
      *      statuses, reduce amounts by their previously filled fractions, apply
      *      criteria resolvers, and emit OrderFulfilled events. Note that this
@@ -487,14 +487,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
      *
      * @param advancedOrders    The advanced orders to validate and reduce by
      *                          their previously filled amounts.
-     * @param criteriaResolvers An array where each element contains a reference
-     *                          to a specific order as well as that order's
-     *                          offer or consideration, a token identifier, and
-     *                          a proof that the supplied token identifier is
-     *                          contained in the order's merkle root. Note that
-     *                          a root of zero indicates that any transferable
-     *                          token identifier is valid and that no proof
-     *                          needs to be supplied.
      * @param maximumFulfilled  The maximum number of orders to fulfill.
      * @param recipient         The intended recipient for all items that do not
      *                          already have a designated recipient and are not
@@ -581,9 +573,8 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 OrderParameters memory orderParameters = advancedOrder.parameters;
                 bytes32 orderHash = _assertConsiderationLengthAndGetOrderHash(orderParameters);
                 require(existingOrderHahes[i] == orderHash, "Mismatch orders data with request id");
-                OrderStatus storage orderStatus = _orderStatus[orderHash];
-                uint256 numerator = orderStatus.numerator;
-                uint256 denominator = orderStatus.denominator;
+                (bool _isValid, bool _isCanceled, uint256 numerator, uint256 denominator) = _getOrderStatus(orderHash);
+
 
                 // Do not track hash or adjust prices if order is not fulfilled.
                 if (numerator == 0) {
@@ -801,8 +792,8 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
     function _validateOrdersAndPrepareOrderHashesWithRandom(
         AdvancedOrder[] memory advancedOrders,
         bool revertOnInvalid,
-        uint256 maximumFulfilled,
-    ) internal returns (bytes32[] memory orderHashes, Execution[] memory executions) {
+        uint256 maximumFulfilled
+    ) internal returns (bytes32[] memory orderHashes) {
         // Ensure this function cannot be triggered during a reentrant call.
         _setReentrancyGuard(true); // Native tokens accepted during execution.
 
@@ -1303,7 +1294,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
     }
 
 
-    /**
+     /**
      * @dev Internal function to perform a final check that each consideration
      *      item for an arbitrary number of fulfilled orders has been met and to
      *      trigger associated executions, transferring the respective items.
@@ -1316,11 +1307,8 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
      * @param recipient       The intended recipient for all items that do not
      *                        already have a designated recipient and are not
      *                        used as part of a provided fulfillment.
-     * @param containsNonOpen A boolean indicating whether any restricted or
-     *                        contract orders are present within the provided
-     *                        array of advanced orders.
      *
-     * @return availableOrders An array of booleans indicating if each order
+     * @return returnBack      An array of booleans indicating if each order
      *                         with an index corresponding to the index of the
      *                         returned boolean was fulfillable or not.
      */
@@ -1391,11 +1379,25 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 }
                 // revert all execution back
                 if(returnBack){
-                    break
+                    break;
                 }
             }
 
             for (uint256 i = 0; i < totalOrders; ++i){
+                // Retrieve the order in question.
+                AdvancedOrder memory advancedOrder = advancedOrders[i];
+
+                // Skip the order in question if not being not fulfilled.
+                if (advancedOrder.numerator == 0) {
+                    // Explicitly set availableOrders at the given index to
+                    // guard against the possibility of dirtied memory.
+                    availableOrders[i] = false;
+                    continue;
+                }
+
+                bytes memory accumulator;
+                // Retrieve the order parameters.
+                OrderParameters memory parameters = advancedOrder.parameters;
                 // Retrieve offer items.
                 OfferItem[] memory offer = parameters.offer;
 
@@ -1440,7 +1442,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
 
             // Retrieve the length of the executions array and place on stack.
             uint256 totalExecutions = executions.length;
-
+            bytes memory accumulator;
             // Iterate over each execution.
             for (uint256 i = 0; i < totalExecutions;) {
                 // Retrieve the execution and the associated received item.
@@ -1462,7 +1464,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
 
                 // Transfer the item specified by the execution.
                 if(returnBack){
-                    item.recipient = execution.offerer;
+                    item.recipient = payable(execution.offerer);
                 }
                 _transferFromPool(item, address(this), execution.conduitKey, accumulator);
 
@@ -1526,7 +1528,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         }
     }
 
-        /**
+    /**
      * @dev Internal function to match an arbitrary number of full or partial
      *      orders, each with an arbitrary number of items for offer and
      *      consideration, supplying criteria resolvers containing specific
@@ -1545,14 +1547,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
      *                          the respective amount with the supplied fraction
      *                          in order for the group of partial fills to be
      *                          considered valid.
-     * @param criteriaResolvers An array where each element contains a reference
-     *                          to a specific order as well as that order's
-     *                          offer or consideration, a token identifier, and
-     *                          a proof that the supplied token identifier is
-     *                          contained in the order's merkle root. Note that
-     *                          an empty root indicates that any (transferable)
-     *                          token identifier is valid and that no associated
-     *                          proof needs to be supplied.
      * @param fulfillments      An array of elements allocating offer components
      *                          to consideration components. Note that each
      *                          consideration component must be fully met in
@@ -1579,9 +1573,10 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         ) = _validateOrdersAndPrepareToFulfillWithRandom(
             advancedOrders,
             existingOrderHahes,
-            true, // Signifies that invalid orders should revert.
             advancedOrders.length,
-            recipient
+            recipient,
+            numerator,
+            denominator
         );
 
         // Emit OrdersMatched event, providing an array of matched order hashes.
@@ -1648,10 +1643,10 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
 
         bytes memory accumulator = new bytes(AccumulatorDisarmed);
 
-        {
-            // Declare a variable for the available native token balance.
-            uint256 nativeTokenBalance;
+        // Declare a variable for the available native token balance.
+        uint256 nativeTokenBalance;
 
+        {
             // Retrieve the length of the executions array and place on stack.
             uint256 totalExecutions = executions.length;
 
@@ -1708,7 +1703,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
 
     function _buildPremium(
         AdvancedOrder[] memory advancedOrders,
-        FulfillmentComponent memory offerComponents,
+        FulfillmentComponent[] memory offerComponents,
         uint256 premium
     ) internal returns (Execution memory execution) {
         // This need pay attention!!!
@@ -1750,7 +1745,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         Fulfillment[] memory fulfillments,
         bytes32[] memory orderHashes,
         address recipient
-    ) internal returns (Execution[] memory executions) {
+    ) internal returns (Execution[] memory executions, bool) {
         // Retrieve fulfillments array length and place on the stack.
         uint256 totalFulfillments = fulfillments.length;
 
