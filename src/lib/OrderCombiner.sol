@@ -1523,7 +1523,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         address recipient,
         uint256 numerator,
         uint256 denominator
-    ) internal override returns (Execution[] memory executions, bool returnBack) {
+    ) internal returns (Execution[] memory executions, bool returnBack) {
         // Validate orders, update order status, and determine item amounts.
         (   
             bytes32[] memory orderHashes,
