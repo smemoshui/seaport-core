@@ -797,30 +797,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         // Ensure this function cannot be triggered during a reentrant call.
         _setReentrancyGuard(true); // Native tokens accepted during execution.
 
-        // Declare an error buffer indicating status of any native offer items.
-        // Native tokens may only be provided as part of contract orders or when
-        // fulfilling via matchOrders or matchAdvancedOrders; if bits indicating
-        // these conditions are not met have been set, throw.
-        uint256 invalidNativeOfferItemErrorBuffer;
-
-        // Use assembly to set the value for the second bit of the error buffer.
-        // 这里是个奇怪的地方 如果我随便改名字和参数 这里是不是不一样了
-        assembly {
-            /**
-             * Use the 231st bit of the error buffer to indicate whether the
-             * current function is not matchAdvancedOrders or matchOrders.
-             *
-             * sig                                func
-             * -----------------------------------------------------------------
-             * 1010100000010111010001000 0 000100 matchOrders
-             * 1111001011010001001010110 0 010010 matchAdvancedOrders
-             * 1110110110011000101001010 1 110100 fulfillAvailableOrders
-             * 1000011100100000000110110 1 000001 fulfillAvailableAdvancedOrders
-             *                           ^ 7th bit
-             */
-            invalidNativeOfferItemErrorBuffer := and(NonMatchSelector_MagicMask, calldataload(0))
-        }
-
         // Declare variables for later use.
         AdvancedOrder memory advancedOrder;
         uint256 terminalMemoryOffset;
@@ -899,15 +875,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // Retrieve the offer item.
                     OfferItem memory offerItem = offer[j];
 
-                    // If the offer item is for the native token and the order
-                    // type is not a contract order type, set the first bit of
-                    // the error buffer to true.
-                    // 0 的位置就是contract order or not
-                    assembly {
-                        invalidNativeOfferItemErrorBuffer :=
-                            or(invalidNativeOfferItemErrorBuffer, lt(mload(offerItem), mload(0)))
-                    }
-
                     // Apply order fill fraction to offer item end amount.
                     // 这个numerator 和 denominator还是要看懂
                     uint256 endAmount = _getFraction(numerator, denominator, offerItem.endAmount);
@@ -926,15 +893,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     offerItem.startAmount = offerItem.endAmount;
                 }
             }
-        }
-
-        // If the first bit is set, a native offer item was encountered on an
-        // order that is not a contract order. If the 231st bit is set in the
-        // error buffer, the current function is not matchOrders or
-        // matchAdvancedOrders. If the value is 1 + (1 << 230), then both the
-        // 1st and 231st bits were set; in that case, revert with an error.
-        if (invalidNativeOfferItemErrorBuffer == NonMatchSelector_InvalidErrorValue) {
-            _revertInvalidNativeOfferItem();
         }
     }
 
@@ -1565,7 +1523,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         address recipient,
         uint256 numerator,
         uint256 denominator
-    ) internal returns (Execution[] memory executions, bool returnBack) {
+    ) internal override returns (Execution[] memory executions, bool returnBack) {
         // Validate orders, update order status, and determine item amounts.
         (   
             bytes32[] memory orderHashes,
