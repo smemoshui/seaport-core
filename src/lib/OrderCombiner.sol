@@ -13,7 +13,8 @@ import {
     OfferItem,
     OrderParameters,
     ReceivedItem,
-    PremiumExecutionIndex
+    PremiumExecutionIndex,
+    OrderProbility
 } from "seaport-types/src/lib/ConsiderationStructs.sol";
 
 import {OrderFulfiller} from "./OrderFulfiller.sol";
