@@ -157,27 +157,29 @@ contract AmountDeriver is AmountDerivationErrors {
     ) internal view returns (uint256 amount) {
         // Only modify end amount if it doesn't already equal start amount.
         if (startAmount != endAmount) {
-            // Aggregate new amounts weighted by time with rounding factor.
-            uint256 totalBeforeDivision = ((startAmount * luckyDenominator) + (endAmount * luckyNumerator) - (startAmount * luckyNumerator));
+            if(luckyNumerator != luckyDenominator) {
+                // Aggregate new amounts weighted by time with rounding factor.
+                uint256 totalBeforeDivision = ((startAmount * luckyDenominator) + (endAmount * luckyNumerator) - (startAmount * luckyNumerator));
 
-            // Use assembly to combine operations and skip divide-by-zero check.
-            assembly {
-                // Multiply by iszero(iszero(totalBeforeDivision)) to ensure
-                // amount is set to zero if totalBeforeDivision is zero,
-                // as intermediate overflow can occur if it is zero.
-                amount :=
-                    mul(
-                        iszero(iszero(totalBeforeDivision)),
-                        // Subtract 1 from the numerator and add 1 to the result if
-                        // roundUp is true to get the proper rounding direction.
-                        // Division is performed with no zero check as duration
-                        // cannot be zero as long as startTime < endTime.
-                        add(div(sub(totalBeforeDivision, roundUp), luckyDenominator), roundUp)
-                    )
+                // Use assembly to combine operations and skip divide-by-zero check.
+                assembly {
+                    // Multiply by iszero(iszero(totalBeforeDivision)) to ensure
+                    // amount is set to zero if totalBeforeDivision is zero,
+                    // as intermediate overflow can occur if it is zero.
+                    amount :=
+                        mul(
+                            iszero(iszero(totalBeforeDivision)),
+                            // Subtract 1 from the numerator and add 1 to the result if
+                            // roundUp is true to get the proper rounding direction.
+                            // Division is performed with no zero check as duration
+                            // cannot be zero as long as startTime < endTime.
+                            add(div(sub(totalBeforeDivision, roundUp), luckyDenominator), roundUp)
+                        )
+                }
+
+                // Return the current amount.
+                return amount;
             }
-
-            // Return the current amount.
-            return amount;
         }
 
         // Return the original amount as startAmount == endAmount.

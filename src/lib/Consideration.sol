@@ -12,12 +12,14 @@ import {
     FulfillmentComponent,
     Order,
     OrderComponents,
-    ReceivedItem
+    ReceivedItem,
+    OrderProbility
 } from "seaport-types/src/lib/ConsiderationStructs.sol";
 
 import {OrderCombiner} from "./OrderCombiner.sol";
 
 import {CalldataStart, CalldataPointer} from "seaport-types/src/helpers/PointerLibraries.sol";
+import "hardhat/console.sol";
 
 import {
     Offset_fulfillAdvancedOrder_criteriaResolvers,
@@ -35,7 +37,7 @@ import {
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IVRFInterface {
-  function requestRandomWords() external returns (uint256 requestId);
+  function requestRandomWords(uint32) external returns (uint256 requestId);
 }
 
 /**
@@ -55,7 +57,6 @@ interface IVRFInterface {
  */
 contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     address private _vrf_controller;
-    mapping(uint256 => Fulfillment[]) private originalFulfillments;
     mapping(uint256 => bytes32[]) private originalOrderHashes;
     /**
      * @notice Derive and set hashes, reference chainId, and associated domain
@@ -114,29 +115,29 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
          * @custom:name orders
          */
         Order[] calldata,
+        /**
+         * @custom:name fulfillments
+         */
+        Fulfillment[] calldata,
         uint256 requestId,
-        uint256 numerator,
-        uint256 denominator
+        OrderProbility[] calldata orderProbility
     ) external payable override returns (Execution[] memory /* executions */ ) {
-
-        Fulfillment[] memory fulfillments = originalFulfillments[requestId];
         bytes32[] memory existingOrderHahes = originalOrderHashes[requestId];
         (Execution[] memory executions, bool returnBack) = _matchAdvancedOrdersWithRandom(
             _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),
-            fulfillments,
+            _toFulfillmentsReturnType(_decodeFulfillments)(CalldataStart.pptr(Offset_matchOrders_fulfillments)),
             existingOrderHahes,
-            msg.sender,
-            numerator,
-            denominator
+            orderProbility
         );
+        console.log("Match and execution process finished");
         // change this if need partial fulfillment
         if(returnBack) {
+            console.log("Match failed and clear status");
             uint256 totalLength = existingOrderHahes.length;
             for(uint256 i = 0; i < totalLength; ++i) {
                 _clearOrderStatus(existingOrderHahes[i]);
             }
         }
-        delete originalFulfillments[requestId];
         delete originalOrderHashes[requestId];
         return executions;
     }
@@ -146,31 +147,24 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
          * @custom:name orders
          */
         Order[] calldata orders,
-        /**
-         * @custom:name fulfillments
-         */
-        Fulfillment[] calldata,
-        uint256 premium,
-        bytes calldata _premiumSig
+        uint256[] calldata premiumOrdersIndex,
+        address[] calldata recipients,
+        uint32 numWords
     ) external payable override returns (bytes32[] memory /* orderHashes */ ) {
-
-        // Convert to advanced, validate, and match orders using fulfillments.
-
-        Fulfillment[] memory fulfillments = _toFulfillmentsReturnType(_decodeFulfillments)(CalldataStart.pptr(Offset_matchOrders_fulfillments));
         (
             Execution[] memory executions,
             bytes32[] memory orderHashes
         ) = prepareOrdersWithRandom(
             _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),
-            fulfillments,
-            premium
+            premiumOrdersIndex,
+            recipients
         );
-
-        uint256 requestId = IVRFInterface(_vrf_controller).requestRandomWords();
+        console.log("Finish prepare and to request VRF");
+        uint256 requestId = IVRFInterface(_vrf_controller).requestRandomWords(numWords);
+        console.log("Requested id is ", requestId);
         // clear reetrancy guard
         _clearReentrancyGuard();
         originalOrderHashes[requestId] = orderHashes;
-        originalFulfillments[requestId] = fulfillments;
         return orderHashes;
     }
 

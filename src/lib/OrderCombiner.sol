@@ -12,7 +12,8 @@ import {
     FulfillmentComponent,
     OfferItem,
     OrderParameters,
-    ReceivedItem
+    ReceivedItem,
+    PremiumExecutionIndex
 } from "seaport-types/src/lib/ConsiderationStructs.sol";
 
 import {OrderFulfiller} from "./OrderFulfiller.sol";
@@ -39,6 +40,7 @@ import {
     ReceivedItem_recipient_offset,
     TwoWords
 } from "seaport-types/src/lib/ConsiderationConstants.sol";
+import "hardhat/console.sol";
 
 /**
  * @title OrderCombiner
@@ -488,9 +490,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
      * @param advancedOrders    The advanced orders to validate and reduce by
      *                          their previously filled amounts.
      * @param maximumFulfilled  The maximum number of orders to fulfill.
-     * @param recipient         The intended recipient for all items that do not
-     *                          already have a designated recipient and are not
-     *                          already used as part of a provided fulfillment.
      *
      * @return orderHashes     The hashes of the orders being fulfilled.
      * @return containsNonOpen A boolean indicating whether any restricted or
@@ -501,9 +500,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         AdvancedOrder[] memory advancedOrders,
         bytes32[] memory existingOrderHahes,
         uint256 maximumFulfilled,
-        address recipient,
-        uint256 luckyNumerator,
-        uint256 luckyDenominator
+        OrderProbility[] memory orderProbility
     ) internal returns (bytes32[] memory orderHashes, bool containsNonOpen) {
         // Ensure this function cannot be triggered during a reentrant call.
         _setReentrancyGuard(true); // Native tokens accepted during execution.
@@ -531,6 +528,8 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
              */
             invalidNativeOfferItemErrorBuffer := and(NonMatchSelector_MagicMask, calldataload(0))
         }
+
+        console.log("Start validation process");
 
         // Declare variables for later use.
         AdvancedOrder memory advancedOrder;
@@ -572,12 +571,16 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 // Validate it, update status, and determine fraction to fill.
                 OrderParameters memory orderParameters = advancedOrder.parameters;
                 bytes32 orderHash = _assertConsiderationLengthAndGetOrderHash(orderParameters);
-                require(existingOrderHahes[i] == orderHash, "Mismatch orders data with request id");
+                require(checkIfOrderHashesExists(existingOrderHahes, orderHash), "Mismatch orders data with request id");
+                //TODO: change this to support partial, ignore first when numerator and denomiator are always 1
                 (bool _isValid, bool _isCanceled, uint256 numerator, uint256 denominator) = _getOrderStatus(orderHash);
+                (uint256 luckyNumerator, uint256 luckyDenominator) = checkIfProbilityExists(orderProbility, orderHash);
 
+                console.log("orderHashes exist and pass the checks");
 
                 // Do not track hash or adjust prices if order is not fulfilled.
                 if (numerator == 0) {
+                    console.log("numerator reach to zero");
                     // Mark fill fraction as zero if the order is not fulfilled.
                     advancedOrder.numerator = 0;
 
@@ -657,19 +660,11 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                         offerItem.startAmount = _getFraction(numerator, denominator, offerItem.startAmount);
                     }
 
-                    // Adjust offer amount using current time; round down.
-                    uint256 currentAmount = _locateLuckyAmount(
-                        offerItem.startAmount,
-                        endAmount,
-                        luckyNumerator,
-                        luckyDenominator,
-                        false // round down
-                    );
-
+                    // Do not change offer amount
                     // Update amounts in memory to match the current amount.
                     // Note that the end amount is used to track spent amounts.
-                    offerItem.startAmount = currentAmount;
-                    offerItem.endAmount = currentAmount;
+                    offerItem.startAmount = endAmount;
+                    offerItem.endAmount = endAmount;
                 }
 
                 // Retrieve array of consideration items for order in question.
@@ -704,7 +699,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                         luckyDenominator,
                         true // round up
                     );
-
+                    console.log("lucky amount for consideration is calculated");
                     considerationItem.startAmount = currentAmount;
 
                     // Utilize assembly to manually "shift" the recipient value,
@@ -748,9 +743,9 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         // matchAdvancedOrders. If the value is 1 + (1 << 230), then both the
         // 1st and 231st bits were set; in that case, revert with an error.
         if (invalidNativeOfferItemErrorBuffer == NonMatchSelector_InvalidErrorValue) {
+            console.log("Revert the error type");
             _revertInvalidNativeOfferItem();
         }
-
         // Emit an event for each order signifying that it has been fulfilled.
         // Skip overflow checks as all for loops are indexed starting at zero.
         unchecked {
@@ -788,6 +783,23 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         }
     }
 
+    function checkIfOrderHashesExists(bytes32[] memory orderHashes, bytes32 orderHash) internal returns(bool) {
+        for(uint i = 0; i < orderHashes.length; i++) {
+            if(orderHashes[i] == orderHash) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkIfProbilityExists(OrderProbility[] memory orderProbility, bytes32 orderHash) internal returns(uint256, uint256) {
+        for(uint i = 0; i < orderProbility.length; i++) {
+            if(orderProbility[i].orderHash == orderHash) {
+                return (orderProbility[i].numerator, orderProbility[i].denominator);
+            }
+        }
+        return (1, 1);
+    }
 
     function _validateOrdersAndPrepareOrderHashesWithRandom(
         AdvancedOrder[] memory advancedOrders,
@@ -801,6 +813,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         AdvancedOrder memory advancedOrder;
         uint256 terminalMemoryOffset;
 
+        console.log("Start validate and prepare order hash");
         unchecked {
             // Read length of orders array and place on the stack.
             uint256 totalOrders = advancedOrders.length;
@@ -811,7 +824,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
             // Determine the memory offset to terminate on during loops.
             terminalMemoryOffset = (totalOrders + 1) << OneWordShift;
         }
-
         // Skip overflow checks as all for loops are indexed starting at zero.
         unchecked {
             // Declare inner variables.
@@ -827,6 +839,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
 
                 // Determine if max number orders have already been fulfilled.
                 if (maximumFulfilled == 0) {
+                    console.log("maximumFulfilled reach to zero");
                     // Mark fill fraction as zero as the order will not be used.
                     advancedOrder.numerator = 0;
 
@@ -837,9 +850,10 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 // Validate it, update status, and determine fraction to fill.
                 (bytes32 orderHash, uint256 numerator, uint256 denominator) =
                     _validateOrderAndUpdateStatus(advancedOrder, revertOnInvalid);
-
+                console.log("orderHash calculated and updated numerator&denominator");
                 // Do not track hash or adjust prices if order is not fulfilled.
                 if (numerator == 0) {
+                    console.log("numerator reach to zero");
                     // Mark fill fraction as zero if the order is not fulfilled.
                     advancedOrder.numerator = 0;
 
@@ -891,7 +905,9 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // Update amounts in memory to match the current amount.
                     // Note that the end amount is used to track spent amounts.
                     offerItem.startAmount = offerItem.endAmount;
+                    console.log("Update offer item, startAmount is ", offerItem.startAmount);
                 }
+                console.log("Finish one order");
             }
         }
     }
@@ -1273,9 +1289,9 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
     function _performFinalChecksAndExecuteOrdersWithRandom(
         AdvancedOrder[] memory advancedOrders,
         Execution[] memory executions,
-        bytes32[] memory orderHashes,
-        address recipient
+        bytes32[] memory orderHashes
     ) internal returns (bool) {
+        console.log("Perform final execution logic");
         // Retrieve the length of the advanced orders array and place on stack.
         uint256 totalOrders = advancedOrders.length;
 
@@ -1283,7 +1299,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         bool[] memory availableOrders = new bool[](totalOrders);
 
         bool returnBack = false;
-
         // Skip overflow checks as all for loops are indexed starting at zero.
         unchecked {
             // Iterate over each order.
@@ -1341,6 +1356,8 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 }
             }
 
+            console.log("Transfer remaining offer item");
+
             for (uint256 i = 0; i < totalOrders; ++i){
                 // Retrieve the order in question.
                 AdvancedOrder memory advancedOrder = advancedOrders[i];
@@ -1394,6 +1411,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
             }
         }
 
+        console.log("Transfer execution or return back");
         {
             // Declare a variable for the available native token balance.
             uint256 nativeTokenBalance;
@@ -1432,7 +1450,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 }
             }
         }
-
+        console.log("Finish execution process");
         // Determine whether any native token balance remains.
         uint256 remainingNativeTokenBalance;
         assembly {
@@ -1520,9 +1538,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         AdvancedOrder[] memory advancedOrders,
         Fulfillment[] memory fulfillments,
         bytes32[] memory existingOrderHahes,
-        address recipient,
-        uint256 numerator,
-        uint256 denominator
+        OrderProbility[] memory orderProbility
     ) internal returns (Execution[] memory executions, bool returnBack) {
         // Validate orders, update order status, and determine item amounts.
         (   
@@ -1532,23 +1548,21 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
             advancedOrders,
             existingOrderHahes,
             advancedOrders.length,
-            recipient,
-            numerator,
-            denominator
+            orderProbility
         );
-
+        console.log("Validate orders and build orderhashes");
         // Emit OrdersMatched event, providing an array of matched order hashes.
         _emitOrdersMatched(orderHashes);
 
         // Fulfill the orders using the supplied fulfillments and recipient.
-        return _fulfillAdvancedOrdersWithRandom(advancedOrders, fulfillments, orderHashes, recipient);
+        return _fulfillAdvancedOrdersWithRandom(advancedOrders, fulfillments, orderHashes);
     }
 
     // Just do simple validation and calculate order hash
     function prepareOrdersWithRandom(
         AdvancedOrder[] memory advancedOrders,
-        Fulfillment[] memory fulfillments,
-        uint256 premium
+        uint256[] memory premiumOrderIndexes,
+        address[] memory recipients
     ) internal returns (Execution[] memory executions, bytes32[] memory orderHashes) {
         // Validate orders, update order status, and determine item amounts.
         orderHashes = _validateOrdersAndPrepareOrderHashesWithRandom(
@@ -1557,8 +1571,15 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
             advancedOrders.length
         );
 
+        //TODO: extra validation for premiumOrderIndexes, such as no consideration
+        console.log("prepare order and obtained all order hashes");
+
         // Retrieve fulfillments array length and place on the stack.
+        (Fulfillment[] memory fulfillments, uint256[] memory premiumExecutionIndexes) = _buildOfferFulfillments(advancedOrders, premiumOrderIndexes);
+        require(recipients.length == premiumExecutionIndexes.length, "Mismatch premium recipients");
+        (premiumExecutionIndexes, recipients) = sortArray(premiumExecutionIndexes, recipients);
         uint256 totalOfferFulfillments = fulfillments.length;
+        uint256 premiumIndex = 0;
 
         // Allocate an execution for each offer fulfillment.
         executions = new Execution[](totalOfferFulfillments);
@@ -1566,16 +1587,26 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         // Lock offer item to the contract
         unchecked {
             uint256 totalFilteredExecutions = 0;
-
+            uint256 totalPremiumExecution = premiumExecutionIndexes.length;
+            console.log("total offer items is ", totalOfferFulfillments);
             for (uint256 i = 0; i < totalOfferFulfillments; ++i) {
                 Fulfillment memory fulfillment = fulfillments[i];
+                address recipent = address(this);
+                // Change recipent as the premium recipient
+                if(premiumIndex < totalPremiumExecution) {
+                    if(i == premiumExecutionIndexes[premiumIndex]) {
+                        recipent = recipients[premiumIndex];
+                        ++premiumIndex;
+                    }
+                }
                 Execution memory execution = _aggregateAvailable(
                     advancedOrders,
                     Side.OFFER,
                     fulfillment.offerComponents,
                     bytes32(0), // not used
-                    address(this)
+                    recipent
                 );
+                console.log("aggregated offer execution");
                 // If the execution is filterable...
                 if (_isFilterableExecution(execution)) {
                     // Increment total filtered executions.
@@ -1584,9 +1615,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // Otherwise, assign the execution to the executions array.
                     executions[i - totalFilteredExecutions] = execution;
                 }
-
-                // Increment iterator.
-                ++i;
             }
             // If some number of executions have been filtered...
             if (totalFilteredExecutions != 0) {
@@ -1597,13 +1625,10 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
             }
         }
 
-        Execution memory premiumExecution = _buildPremium(advancedOrders, fulfillments[1].offerComponents, premium);
-
         bytes memory accumulator = new bytes(AccumulatorDisarmed);
 
         // Declare a variable for the available native token balance.
         uint256 nativeTokenBalance;
-
         {
             // Retrieve the length of the executions array and place on stack.
             uint256 totalExecutions = executions.length;
@@ -1629,54 +1654,118 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
 
                 // Transfer the item specified by the execution.
                 _transfer(item, execution.offerer, execution.conduitKey, accumulator);
-
+                console.log("_transfer offerer lock amount");
                 // Skip overflow check as for loop is indexed starting at zero.
                 unchecked {
                     ++i;
                 }
             }
         }
-
-        ReceivedItem memory premiumItem = premiumExecution.item;
-
-        // If execution transfers native tokens, reduce value available.
-        if (premiumItem.itemType == ItemType.NATIVE) {
-            // Get the current available balance of native tokens.
-            assembly {
-                nativeTokenBalance := selfbalance()
-            }
-
-            // Ensure that sufficient native tokens are still available.
-            if (premiumItem.amount > nativeTokenBalance) {
-                _revertInsufficientNativeTokensSupplied();
-            }
-        }
-
-        // Transfer the item specified by the execution.
-        _transfer(premiumItem, premiumExecution.offerer, premiumExecution.conduitKey, accumulator);
-
         // Trigger it
         _triggerIfArmed(accumulator);
-    }
+        console.log("Finish transfer action");
+        uint256 orderHashIndex = 0;
+        uint256 totalOrderHash = orderHashes.length;
+        premiumOrderIndexes = sortArray(premiumOrderIndexes);
+        premiumIndex = 0;
+        uint256 totalPremiumOrderLength = premiumOrderIndexes.length;
+        for(uint256 i = 0; i < totalOrderHash; ++i) {
+            if(premiumIndex < totalPremiumOrderLength) {
+                if(i == premiumOrderIndexes[premiumIndex]){
+                    continue;
+                }
+            }
+            if(i != orderHashIndex){
+                orderHashes[orderHashIndex] = orderHashes[i];
+            }
+            ++orderHashIndex;
+        }
 
-    function _buildPremium(
-        AdvancedOrder[] memory advancedOrders,
-        FulfillmentComponent[] memory offerComponents,
-        uint256 premium
-    ) internal returns (Execution memory execution) {
-        // This need pay attention!!!
-        unchecked {
-            execution = _aggregateAvailable(
-                advancedOrders,
-                Side.OFFER,
-                offerComponents,
-                bytes32(0), // not used
-                advancedOrders[0].parameters.offerer
-            );
-            execution.item.amount = premium;
+        if (totalPremiumOrderLength != 0) {
+            // reduce the total length of the order hashes
+            assembly {
+                mstore(orderHashes, sub(mload(orderHashes), totalPremiumOrderLength))
+            }
         }
     }
 
+    function sortArray(uint256[] memory arr) private pure returns (uint256[] memory) {
+        uint256 l = arr.length;
+        for(uint256 i = 0; i < l; i++) {
+            for(uint256 j = i+1; j < l ;j++) {
+                if(arr[i] > arr[j]) {
+                    uint256 temp = arr[i];
+                    arr[i] = arr[j];
+                    arr[j] = temp;
+                }
+            }
+        }
+        return arr;
+    }
+
+    function sortArray(uint256[] memory arr, address[] memory recipients) private pure returns (uint256[] memory, address[] memory) {
+        uint256 l = arr.length;
+        for(uint256 i = 0; i < l; i++) {
+            for(uint256 j = i+1; j < l ;j++) {
+                if(arr[i] > arr[j]) {
+                    uint256 temp = arr[i];
+                    arr[i] = arr[j];
+                    arr[j] = temp;
+
+                    address addr = recipients[i];
+                    recipients[i] = recipients[j];
+                    recipients[j] = addr;
+                }
+            }
+        }
+        return (arr, recipients);
+    }
+
+    function _buildOfferFulfillments(
+        AdvancedOrder[] memory advancedOrders,
+        uint256[] memory premiumOrderIndexes
+    ) internal returns (Fulfillment[] memory fulfillments, uint256[] memory premiumExecutionIndexes) {
+        uint256 ordersLength = advancedOrders.length;
+        uint256[] totalFulfillments = new uint256[](ordersLength);
+        uint256 currOffers = 0;
+        for(uint256 i = 0; i < ordersLength; ++i) {
+            totalFulfillments[i] = currOffers;
+            currOffers = currOffers + advancedOrders[i].parameters.offer.length;
+        }
+        fulfillments = new Fulfillment[](currOffers);
+        uint256 index = 0;
+        for(uint256 i = 0; i < ordersLength; ++i) {
+            uint256 offerLength = advancedOrders[i].parameters.offer.length;
+            for(uint256 j = 0; j < offerLength; ++j) {
+                Fulfillment memory temp;
+                temp.offerComponents = new FulfillmentComponent[](1);
+                temp.offerComponents[0].orderIndex = i;
+                temp.offerComponents[0].itemIndex = j;
+                fulfillments[index] = temp;
+                ++index;
+            }
+        }
+
+        currOffers = 0;
+        uint256 premiumLength = premiumOrderIndexes.length;
+        for(uint256 i = 0; i < premiumLength; ++i) {
+            index = premiumOrderIndexes[i];
+            require(index < ordersLength, "Invalid premium order index");
+            currOffers = currOffers + advancedOrders[index].parameters.offer.length;
+        }
+
+        index = 0;
+        premiumExecutionIndexes = new uint256[](currOffers);
+        for(uint256 i = 0; i < premiumLength; ++i) {
+            uint256 orderIndex = premiumOrderIndexes[i];
+            uint256 offerStart = totalFulfillments[orderIndex];
+            uint256 offerLength = advancedOrders[orderIndex].parameters.offer.length;
+            for(uint256 j = 0; j < offerLength; ++j) {
+                premiumExecutionIndexes[index] = offerStart + j;
+                ++index;
+            }
+        }
+    }
 
     /**
      * @dev Internal function to fulfill an arbitrary number of orders, either
@@ -1701,15 +1790,14 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
     function _fulfillAdvancedOrdersWithRandom(
         AdvancedOrder[] memory advancedOrders,
         Fulfillment[] memory fulfillments,
-        bytes32[] memory orderHashes,
-        address recipient
+        bytes32[] memory orderHashes
     ) internal returns (Execution[] memory executions, bool) {
         // Retrieve fulfillments array length and place on the stack.
         uint256 totalFulfillments = fulfillments.length;
 
         // Allocate executions by fulfillment and apply them to each execution.
         executions = new Execution[](totalFulfillments);
-
+        console.log("Start building execution according to the fulfillments");
         // Skip overflow checks as all for loops are indexed starting at zero.
         unchecked {
             // Track number of filtered executions.
@@ -1726,7 +1814,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 Execution memory execution = _applyFulfillment(
                     advancedOrders, fulfillment.offerComponents, fulfillment.considerationComponents, i
                 );
-
+                console.log("Built one execution");
                 // If the execution is filterable...
                 if (_isFilterableExecution(execution)) {
                     // Increment total filtered executions.
@@ -1745,10 +1833,10 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 }
             }
         }
-
+        console.log("Finish execution building process");
         // change offer instead of recipient
         // Perform final checks and execute orders.
-        bool returnBack = _performFinalChecksAndExecuteOrdersWithRandom(advancedOrders, executions, orderHashes, recipient);
+        bool returnBack = _performFinalChecksAndExecuteOrdersWithRandom(advancedOrders, executions, orderHashes);
 
         // Return the executions array.
         return (executions, returnBack);
