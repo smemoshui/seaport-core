@@ -13,7 +13,6 @@ import {
     OfferItem,
     OrderParameters,
     ReceivedItem,
-    PremiumExecutionIndex,
     OrderProbility
 } from "seaport-types/src/lib/ConsiderationStructs.sol";
 
@@ -776,7 +775,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     orderHash,
                     orderParameters.offerer,
                     orderParameters.zone,
-                    recipient,
+                    address(this),
                     orderParameters.offer,
                     orderParameters.consideration
                 );
@@ -1279,9 +1278,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
      *                        transfers to perform when fulfilling the given
      *                        orders.
      * @param orderHashes     An array of order hashes for each order.
-     * @param recipient       The intended recipient for all items that do not
-     *                        already have a designated recipient and are not
-     *                        used as part of a provided fulfillment.
      *
      * @return returnBack      An array of booleans indicating if each order
      *                         with an index corresponding to the index of the
@@ -1528,9 +1524,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
      *                          to consideration components. Note that each
      *                          consideration component must be fully met in
      *                          order for the match operation to be valid.
-     * @param recipient         The intended recipient for all unspent offer
-     *                          item amounts.
-     *
      * @return executions An array of elements indicating the sequence of
      *                    transfers performed as part of matching the given
      *                    orders.
@@ -1727,7 +1720,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         uint256[] memory premiumOrderIndexes
     ) internal returns (Fulfillment[] memory fulfillments, uint256[] memory premiumExecutionIndexes) {
         uint256 ordersLength = advancedOrders.length;
-        uint256[] totalFulfillments = new uint256[](ordersLength);
+        uint256[] memory totalFulfillments = new uint256[](ordersLength);
         uint256 currOffers = 0;
         for(uint256 i = 0; i < ordersLength; ++i) {
             totalFulfillments[i] = currOffers;
@@ -1780,9 +1773,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
      *                        amount of each consideration component must be
      *                        zero for a match operation to be considered valid.
      * @param orderHashes     An array of order hashes for each order.
-     * @param recipient       The intended recipient for all items that do not
-     *                        already have a designated recipient and are not
-     *                        used as part of a provided fulfillment.
      *
      * @return executions An array of elements indicating the sequence of
      *                    transfers performed as part of matching the given
