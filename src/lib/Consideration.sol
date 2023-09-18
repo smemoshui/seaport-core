@@ -67,7 +67,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
      *                          ERC20/721/1155 tokens.
      */
     constructor(address conduitController) OrderCombiner(conduitController) {
-        _vrf_controller = address(0xEc679ECEC37fb1dB69F74C1a3DF789523B12aBa3);
+        _vrf_controller = address(0x1da3e274bDC388641b867eF31144a9179d96Fc41);
     }
 
     /**
@@ -150,7 +150,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         uint256[] calldata premiumOrdersIndex,
         address[] calldata recipients,
         uint32 numWords
-    ) external payable override returns (bytes32[] memory /* orderHashes */ ) {
+    ) external payable override returns (uint256) {
         (
             Execution[] memory executions,
             bytes32[] memory orderHashes
@@ -165,7 +165,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         // clear reetrancy guard
         _clearReentrancyGuard();
         originalOrderHashes[requestId] = orderHashes;
-        return orderHashes;
+        return requestId;
     }
 
     /**
