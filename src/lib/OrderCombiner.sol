@@ -792,7 +792,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         //TODO: extra validation for premiumOrderIndexes, such as no consideration
         console.log("prepare order and obtained all order hashes");
         for(uint256 i = 0; i < premiumOrderIndexes.length; ++i) {
-            require(advancedOrders[i].parameters.consideration.length == 0, "Invalid premium order");
+            require(advancedOrders[premiumOrderIndexes[i]].parameters.consideration.length == 0, "Invalid premium order");
         }
 
         // Retrieve fulfillments array length and place on the stack.
