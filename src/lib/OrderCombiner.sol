@@ -73,16 +73,13 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
      * @param maximumFulfilled  The maximum number of orders to fulfill.
      *
      * @return orderHashes     The hashes of the orders being fulfilled.
-     * @return containsNonOpen A boolean indicating whether any restricted or
-     *                         contract orders are present within the provided
-     *                         array of advanced orders.
      */
     function _validateOrdersAndFulfillWithRandom(
         AdvancedOrder[] memory advancedOrders,
         bytes32[] memory existingOrderHahes,
         uint256 maximumFulfilled,
         OrderProbility[] memory orderProbility
-    ) internal returns (bytes32[] memory orderHashes, bool containsNonOpen) {
+    ) internal returns (bytes32[] memory orderHashes) {
         // Ensure this function cannot be triggered during a reentrant call.
         _setReentrancyGuard(true); // Native tokens accepted during execution.
 
@@ -208,10 +205,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                         // depth errors.
                         let isNonContract := lt(orderType, 4)
                         mstore(0, isNonContract)
-
-                        // Update the variable indicating if the order is not an
-                        // open order, remaining set if it has been set already.
-                        containsNonOpen := or(containsNonOpen, gt(orderType, 1))
                     }
                 }
 
@@ -241,11 +234,19 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                         offerItem.startAmount = _getFraction(numerator, denominator, offerItem.startAmount);
                     }
 
+                    uint256 currentAmount = _locateLuckyAmount(
+                        considerationItem.startAmount,
+                        endAmount,
+                        luckyNumerator,
+                        luckyDenominator,
+                        false // round up
+                    );
+
                     // Do not change offer amount
                     // Update amounts in memory to match the current amount.
-                    // Note that the end amount is used to track spent amounts.
-                    offerItem.startAmount = endAmount;
-                    offerItem.endAmount = endAmount;
+                    offerItem.startAmount = currentAmount;
+                    // Note that the end amount is used to track extra amount.
+                    offerItem.endAmount = endAmount - currentAmount;
                 }
 
                 // Retrieve array of consideration items for order in question.
@@ -610,12 +611,9 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // Transfer to recipient if unspent amount is not zero.
                     // Note that the transfer will not be reflected in the
                     // executions array.
-                    if (offerItem.startAmount != 0) {
-                        // Replace the endAmount parameter with the recipient to
-                        // make offerItem compatible with the ReceivedItem input
-                        // to _transfer and cache the original endAmount so it
-                        // can be restored after the transfer.
+                    if (offerItem.startAmount != 0 || offerItem.endAmount != 0) {
                         uint256 originalEndAmount = _replaceEndAmountWithRecipient(offerItem, parameters.offerer);
+                        offerItem.startAmount = offerItem.startAmount + offerItem.endAmount;
 
                         // Transfer excess offer item amount to recipient.
                         _toOfferItemInput(_transferFromPool)(
@@ -762,8 +760,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
     ) internal returns (Execution[] memory executions, bool returnBack) {
         // Validate orders, update order status, and determine item amounts.
         (   
-            bytes32[] memory orderHashes,
-            bool _containsNonOpen
+            bytes32[] memory orderHashes
         ) = _validateOrdersAndFulfillWithRandom(
             advancedOrders,
             existingOrderHahes,
