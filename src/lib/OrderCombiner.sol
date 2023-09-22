@@ -625,9 +625,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                             mstore(add(offerItem, ReceivedItem_recipient_offset), originalEndAmount)
                         }
                     }
-
-                    // Restore original amount on the offer item.
-                    offerItem.startAmount = offerItem.endAmount;
                 }
             }
         }
