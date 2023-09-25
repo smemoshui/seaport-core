@@ -150,8 +150,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 OrderParameters memory orderParameters = advancedOrder.parameters;
                 bytes32 orderHash = _assertConsiderationLengthAndGetOrderHash(orderParameters);
                 require(checkIfOrderHashesExists(existingOrderHahes, orderHash), "Mismatch orders data with request id");
-                //TODO: change this to support partial, ignore first when numerator and denomiator are always 1
-                (bool _isValid, bool _isCanceled, uint256 numerator, uint256 denominator) = _getOrderStatus(orderHash);
+                (uint256 numerator, uint256 denominator) = _getLastMatchStatus(orderHash);
                 (uint256 luckyNumerator, uint256 luckyDenominator) = checkIfProbilityExists(orderProbility, orderHash);
 
                 console.log("orderHashes exist and pass the checks");
@@ -442,6 +441,8 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // Continue iterating through the remaining orders.
                     continue;
                 }
+
+                _storeLastMatchStatus(orderHash, numerator, denominator);
 
                 // Otherwise, track the order hash in question.
                 // OneWordShift 0x5 所以是32位 正好是bytes32
