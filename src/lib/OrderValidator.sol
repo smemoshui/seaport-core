@@ -11,7 +11,7 @@ import {
     OrderComponents,
     OrderParameters,
     OrderStatus,
-    LastOrderStatus
+    LastMatchStatus
 } from "seaport-types/src/lib/ConsiderationStructs.sol";
 
 import {
