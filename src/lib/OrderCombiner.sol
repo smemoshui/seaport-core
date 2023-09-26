@@ -429,7 +429,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 }
 
                 // Validate it, update status, and determine fraction to fill.
-                (bytes32 orderHash, uint256 numerator, uint256 denominator) =
+                (bytes32 orderHash, uint120 numerator, uint120 denominator) =
                     _validateOrderAndUpdateStatus(advancedOrder, revertOnInvalid);
                 console.log("orderHash calculated and updated numerator&denominator");
                 // Do not track hash or adjust prices if order is not fulfilled.
