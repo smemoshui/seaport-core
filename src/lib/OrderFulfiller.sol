@@ -13,9 +13,7 @@ import {
     SpentItem
 } from "seaport-types/src/lib/ConsiderationStructs.sol";
 
-import {BasicOrderFulfiller} from "./BasicOrderFulfiller.sol";
-
-import {CriteriaResolution} from "./CriteriaResolution.sol";
+import {OrderValidator} from "./OrderValidator.sol";
 
 import {AmountDeriver} from "./AmountDeriver.sol";
 
@@ -38,7 +36,7 @@ import {
  *         single order is being fulfilled and where basic order fulfillment is
  *         not available as an option.
  */
-contract OrderFulfiller is BasicOrderFulfiller, CriteriaResolution, AmountDeriver {
+contract OrderFulfiller is OrderValidator, AmountDeriver {
     /**
      * @dev Derive and set hashes, reference chainId, and associated domain
      *      separator during deployment.
@@ -47,7 +45,7 @@ contract OrderFulfiller is BasicOrderFulfiller, CriteriaResolution, AmountDerive
      *                          that may optionally be used to transfer approved
      *                          ERC20/721/1155 tokens.
      */
-    constructor(address conduitController) BasicOrderFulfiller(conduitController) {}
+    constructor(address conduitController) OrderValidator(conduitController) {}
 
     /**
      * @dev Internal function to emit an OrderFulfilled event. OfferItems are

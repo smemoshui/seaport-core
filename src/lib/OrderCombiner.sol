@@ -234,7 +234,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     }
 
                     uint256 currentAmount = _locateLuckyAmount(
-                        considerationItem.startAmount,
+                        offerItem.startAmount,
                         endAmount,
                         luckyNumerator,
                         luckyDenominator,

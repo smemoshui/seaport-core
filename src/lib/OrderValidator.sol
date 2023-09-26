@@ -457,7 +457,7 @@ contract OrderValidator is Executor, ZoneInteraction {
      */
     function _getGeneratedOrder(OrderParameters memory orderParameters, bytes memory context, bool revertOnInvalid)
         internal
-        returns (bytes32 orderHash, uint256 numerator, uint256 denominator)
+        returns (bytes32 orderHash, uint120 numerator, uint120 denominator)
     {
         // Ensure that consideration array length is equal to the total original
         // consideration items value.
@@ -829,7 +829,7 @@ contract OrderValidator is Executor, ZoneInteraction {
     function _revertOrReturnEmpty(bool revertOnInvalid, bytes32 contractOrderHash)
         internal
         pure
-        returns (bytes32 orderHash, uint256 numerator, uint256 denominator)
+        returns (bytes32 orderHash, uint120 numerator, uint120 denominator)
     {
         if (revertOnInvalid) {
             _revertInvalidContractOrder(contractOrderHash);
