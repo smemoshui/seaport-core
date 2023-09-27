@@ -379,7 +379,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         AdvancedOrder[] memory advancedOrders,
         bool revertOnInvalid,
         uint256 maximumFulfilled
-    ) internal returns (bytes32[] memory orderHashes) {
+    ) internal returns (uint120[] memory numerators, uint120[] memory denominators, bytes32[] memory orderHashes) {
         // Ensure this function cannot be triggered during a reentrant call.
         _setReentrancyGuard(true); // Native tokens accepted during execution.
 
@@ -393,6 +393,8 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
 
             // Track the order hash for each order being fulfilled.
             orderHashes = new bytes32[](totalOrders);
+            numerators = new uint120[](totalOrders);
+            denominators = new uint120[](totalOrders);
 
             // Determine the memory offset to terminate on during loops.
             terminalMemoryOffset = (totalOrders + 1) << OneWordShift;
@@ -432,13 +434,14 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     continue;
                 }
 
-                _storeLastMatchStatus(orderHash, numerator, denominator);
-
                 // Otherwise, track the order hash in question.
                 // OneWordShift 0x5 所以是32位 正好是bytes32
                 assembly {
                     mstore(add(orderHashes, i), orderHash)
                 }
+
+                numerators[i/OneWord - 1] = numerator;
+                denominators[i/OneWord - 1] = denominator;
 
                 // Decrement the number of fulfilled orders.
                 // Skip underflow check as the condition before
@@ -599,14 +602,13 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // Note that the transfer will not be reflected in the
                     // executions array.
                     if (offerItem.startAmount != 0 || offerItem.endAmount != 0) {
-                        uint256 originalEndAmount = _replaceEndAmountWithRecipient(offerItem, parameters.offerer);
                         offerItem.startAmount = offerItem.startAmount + offerItem.endAmount;
+                        uint256 originalEndAmount = _replaceEndAmountWithRecipient(offerItem, parameters.offerer);
 
                         // Transfer excess offer item amount to recipient.
                         _toOfferItemInput(_transferFromPool)(
                             offerItem, address(this), parameters.conduitKey, accumulator
                         );
-
                         // Restore the original endAmount in offerItem.
                         assembly {
                             mstore(add(offerItem, ReceivedItem_recipient_offset), originalEndAmount)
@@ -763,7 +765,9 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         address[] memory recipients
     ) internal returns (Execution[] memory executions, bytes32[] memory orderHashes) {
         // Validate orders, update order status, and determine item amounts.
-        orderHashes = _validateAndPrepareOrdersWithRandom(
+        uint120[] memory numerators;
+        uint120[] memory denominators;
+        (numerators, denominators, orderHashes) = _validateAndPrepareOrdersWithRandom(
             advancedOrders,
             true, // Signifies that invalid orders should revert.
             advancedOrders.length
@@ -868,12 +872,14 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
         for(uint256 i = 0; i < totalOrderHash; ++i) {
             if(premiumIndex < totalPremiumOrderLength) {
                 if(i == premiumOrderIndexes[premiumIndex]){
+                    ++premiumIndex;
                     continue;
                 }
             }
             if(i != orderHashIndex){
                 orderHashes[orderHashIndex] = orderHashes[i];
             }
+            _storeLastMatchStatus(orderHashes[i], numerators[i], denominators[i]);
             ++orderHashIndex;
         }
 
@@ -882,8 +888,7 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
             assembly {
                 mstore(orderHashes, sub(mload(orderHashes), totalPremiumOrderLength))
             }
-        }
-        console.log("Removed premium orders");
+        } 
     }
 
     function sortArray(uint256[] memory arr) private pure returns (uint256[] memory) {
