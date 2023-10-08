@@ -114,7 +114,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         /**
          * @custom:name orders
          */
-        AdvancedOrder[] calldata,
+        Order[] calldata,
         /**
          * @custom:name fulfillments
          */
@@ -146,7 +146,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         /**
          * @custom:name orders
          */
-        AdvancedOrder[] calldata orders,
+        Order[] calldata orders,
         uint256[] calldata premiumOrdersIndex,
         address[] calldata recipients,
         uint32 numWords
