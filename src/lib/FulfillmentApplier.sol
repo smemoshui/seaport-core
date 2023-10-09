@@ -87,7 +87,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
         Execution memory considerationExecution;
 
         // Validate & aggregate consideration items to new Execution object.
-        _aggregateValidFulfillmentConsiderationItems(advancedOrders, considerationComponents, considerationExecution);
+        _aggregateValidFulfillmentConsiderationItems(advancedOrders, considerationComponents, considerationExecution, false);
 
         // Retrieve the consideration item from the execution struct.
         ReceivedItem memory considerationItem = considerationExecution.item;
@@ -106,7 +106,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
         // Recipient does not need to be specified because it will always be set
         // to that of the consideration.
         // Validate & aggregate offer items to Execution object.
-        _aggregateValidFulfillmentOfferItems(advancedOrders, offerComponents, execution);
+        _aggregateValidFulfillmentOfferItems(advancedOrders, offerComponents, execution, false);
 
         // Ensure offer & consideration item types, tokens, & identifiers match.
         // (a != b || c != d || e != f) == (((a ^ b) | (c ^ d) | (e ^ f)) != 0),
@@ -202,12 +202,12 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
                 item.recipient = payable(recipient);
 
                 // Return execution for aggregated items provided by offerer.
-                _aggregateValidFulfillmentOfferItems(advancedOrders, fulfillmentComponents, execution);
+                _aggregateValidFulfillmentOfferItems(advancedOrders, fulfillmentComponents, execution, true);
             } else {
                 // Otherwise, fulfillment components are consideration
                 // components. Return execution for aggregated items provided by
                 // the fulfiller.
-                _aggregateValidFulfillmentConsiderationItems(advancedOrders, fulfillmentComponents, execution);
+                _aggregateValidFulfillmentConsiderationItems(advancedOrders, fulfillmentComponents, execution, true);
 
                 // Set the caller as the offerer on the execution.
                 execution.offerer = msg.sender;
@@ -241,7 +241,8 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
     function _aggregateValidFulfillmentOfferItems(
         AdvancedOrder[] memory advancedOrders,
         FulfillmentComponent[] memory offerComponents,
-        Execution memory execution
+        Execution memory execution,
+        bool errorOnZero
     ) internal pure {
         assembly {
             // Declare a variable for the final aggregated item amount.
@@ -395,12 +396,13 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
             if errorBuffer {
                 // If errorBuffer is 1, an item had an amount of zero.
                 if eq(errorBuffer, 1) {
-                    // Store left-padded selector with push4 (reduces bytecode)
-                    // mem[28:32] = selector
-                    mstore(0, MissingItemAmount_error_selector)
+                    if errorOnZero {
+                        // Store left-padded selector with push4, mem[28:32]
+                        mstore(0, MissingItemAmount_error_selector)
 
-                    // revert(abi.encodeWithSignature("MissingItemAmount()"))
-                    revert(Error_selector_offset, MissingItemAmount_error_length)
+                        // revert(abi.encodeWithSignature("MissingItemAmount()"))
+                        revert(Error_selector_offset, MissingItemAmount_error_length)
+                    }
                 }
 
                 // If errorBuffer is not 1 or 0, the sum overflowed.
@@ -453,7 +455,8 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
     function _aggregateValidFulfillmentConsiderationItems(
         AdvancedOrder[] memory advancedOrders,
         FulfillmentComponent[] memory considerationComponents,
-        Execution memory execution
+        Execution memory execution,
+        bool errorOnZero
     ) internal pure {
         // Utilize assembly in order to efficiently aggregate the items.
         assembly {
@@ -616,11 +619,13 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
             if errorBuffer {
                 // If errorBuffer is 1, an item had an amount of zero.
                 if eq(errorBuffer, 1) {
-                    // Store left-padded selector with push4, mem[28:32]
-                    mstore(0, MissingItemAmount_error_selector)
+                    if errorOnZero {
+                        // Store left-padded selector with push4, mem[28:32]
+                        mstore(0, MissingItemAmount_error_selector)
 
-                    // revert(abi.encodeWithSignature("MissingItemAmount()"))
-                    revert(Error_selector_offset, MissingItemAmount_error_length)
+                        // revert(abi.encodeWithSignature("MissingItemAmount()"))
+                        revert(Error_selector_offset, MissingItemAmount_error_length)
+                    }
                 }
 
                 // If errorBuffer is not 1 or 0, `amount` overflowed.
