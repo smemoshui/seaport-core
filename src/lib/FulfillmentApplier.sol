@@ -403,12 +403,13 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
                         // revert(abi.encodeWithSignature("MissingItemAmount()"))
                         revert(Error_selector_offset, MissingItemAmount_error_length)
                     }
-                    return(0, 0)
                 }
 
-                // If errorBuffer is not 1 or 0, the sum overflowed.
-                // Panic!
-                throwOverflow()
+                if not(eq(errorBuffer, 1)) {
+                    // If errorBuffer is not 1 or 0, `amount` overflowed.
+                    // Panic!
+                    throwOverflow()
+                }
             }
 
             // Declare function for reverts on invalid fulfillment data.
@@ -627,12 +628,13 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
                         // revert(abi.encodeWithSignature("MissingItemAmount()"))
                         revert(Error_selector_offset, MissingItemAmount_error_length)
                     }
-                    return(0, 0)
                 }
 
-                // If errorBuffer is not 1 or 0, `amount` overflowed.
-                // Panic!
-                throwOverflow()
+                if not(eq(errorBuffer, 1)) {
+                    // If errorBuffer is not 1 or 0, `amount` overflowed.
+                    // Panic!
+                    throwOverflow()
+                }
             }
 
             // Declare function for reverts on invalid fulfillment data.
