@@ -403,7 +403,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
                         // revert(abi.encodeWithSignature("MissingItemAmount()"))
                         revert(Error_selector_offset, MissingItemAmount_error_length)
                     }
-                    return
+                    return(0, 0)
                 }
 
                 // If errorBuffer is not 1 or 0, the sum overflowed.
@@ -627,7 +627,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
                         // revert(abi.encodeWithSignature("MissingItemAmount()"))
                         revert(Error_selector_offset, MissingItemAmount_error_length)
                     }
-                    return
+                    return(0, 0)
                 }
 
                 // If errorBuffer is not 1 or 0, `amount` overflowed.
