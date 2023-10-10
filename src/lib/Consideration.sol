@@ -67,7 +67,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
      *                          ERC20/721/1155 tokens.
      */
     constructor(address conduitController) OrderCombiner(conduitController) {
-        _vrf_controller = address(0x1da3e274bDC388641b867eF31144a9179d96Fc41);
+        _vrf_controller = address(0xC619D985a88e341B618C23a543B8Efe2c55D1b37);
     }
 
     /**

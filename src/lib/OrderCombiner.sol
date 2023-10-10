@@ -1022,6 +1022,11 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // Otherwise, assign the execution to the executions array.
                     executions[i - totalFilteredExecutions] = execution;
                 }
+                // skip the following execution since it should fail
+                if (_isZeroExecution(execution)) {
+                    totalFilteredExecutions += totalFulfillments - i - 1;
+                    break;
+                }
             }
 
             // If some number of executions have been filtered...
@@ -1077,6 +1082,17 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                     // indicating that the execution does not involve native tokens.
                     iszero(iszero(mload(item)))
                 )
+        }
+    }
+
+    function _isZeroExecution(Execution memory execution) internal pure returns (bool isZero) {
+        // Utilize assembly to efficiently determine if execution is filterable.
+        assembly {
+            // Retrieve the received item referenced by the execution.
+            let item := mload(execution)
+
+            // Determine whether the execution amount is zero.
+            isZero := iszero(mload(add(item, ReceivedItem_amount_offset)))
         }
     }
 }
