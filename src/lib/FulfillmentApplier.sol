@@ -405,7 +405,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
                     }
                 }
 
-                if not(eq(errorBuffer, 1)) {
+                if eq(errorBuffer, 2) {
                     // If errorBuffer is not 1 or 0, `amount` overflowed.
                     // Panic!
                     throwOverflow()
@@ -630,7 +630,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
                     }
                 }
 
-                if not(eq(errorBuffer, 1)) {
+                if eq(errorBuffer, 2) {
                     // If errorBuffer is not 1 or 0, `amount` overflowed.
                     // Panic!
                     throwOverflow()
