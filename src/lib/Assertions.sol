@@ -77,6 +77,7 @@ contract Assertions is GettersAndDerivers, CounterManager, TokenTransferrerError
         );
 
         // Derive and return order hash using current counter for the offerer.
+        // 这里的细节要再确认
         return _deriveOrderHash(orderParameters, _getCounter(orderParameters.offerer));
     }
 

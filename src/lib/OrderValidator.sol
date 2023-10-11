@@ -10,7 +10,8 @@ import {
     Order,
     OrderComponents,
     OrderParameters,
-    OrderStatus
+    OrderStatus,
+    LastMatchStatus
 } from "seaport-types/src/lib/ConsiderationStructs.sol";
 
 import {
@@ -63,6 +64,9 @@ contract OrderValidator is Executor, ZoneInteraction {
 
     // Track nonces for contract offerers.
     mapping(address => uint256) internal _contractNonces;
+
+    // Track doing orders
+    mapping(bytes32 => LastMatchStatus) private _lastMatchStatus;
 
     /**
      * @dev Derive and set hashes, reference chainId, and associated domain
@@ -134,7 +138,7 @@ contract OrderValidator is Executor, ZoneInteraction {
      */
     function _validateOrderAndUpdateStatus(AdvancedOrder memory advancedOrder, bool revertOnInvalid)
         internal
-        returns (bytes32 orderHash, uint256 numerator, uint256 denominator)
+        returns (bytes32 orderHash, uint120 numerator, uint120 denominator)
     {
         // Retrieve the parameters for the order.
         OrderParameters memory orderParameters = advancedOrder.parameters;
@@ -147,6 +151,7 @@ contract OrderValidator is Executor, ZoneInteraction {
 
         // Read numerator and denominator from memory and place on the stack.
         // Note that overflowed values are masked.
+        // 如果是basic order 不是advanced 那么这两个就都是1？需要看看parser
         assembly {
             numerator := and(mload(add(advancedOrder, AdvancedOrder_numerator_offset)), MaxUint120)
 
@@ -157,6 +162,7 @@ contract OrderValidator is Executor, ZoneInteraction {
         bool invalidFraction;
 
         // If the order is a contract order, return the generated order.
+        // 我们肯定不是这里了 我们就是full_open 0
         if (orderParameters.orderType == OrderType.CONTRACT) {
             // Ensure that the numerator and denominator are both equal to 1.
             assembly {
@@ -196,6 +202,8 @@ contract OrderValidator is Executor, ZoneInteraction {
 
         // Retrieve current counter & use it w/ parameters to derive order hash.
         orderHash = _assertConsiderationLengthAndGetOrderHash(orderParameters);
+
+        _checkLasmMatchStatusExist(orderHash);
 
         // Retrieve the order status using the derived order hash.
         OrderStatus storage orderStatus = _orderStatus[orderHash];
@@ -449,7 +457,7 @@ contract OrderValidator is Executor, ZoneInteraction {
      */
     function _getGeneratedOrder(OrderParameters memory orderParameters, bytes memory context, bool revertOnInvalid)
         internal
-        returns (bytes32 orderHash, uint256 numerator, uint256 denominator)
+        returns (bytes32 orderHash, uint120 numerator, uint120 denominator)
     {
         // Ensure that consideration array length is equal to the total original
         // consideration items value.
@@ -460,6 +468,7 @@ contract OrderValidator is Executor, ZoneInteraction {
         {
             address offerer = orderParameters.offerer;
             bool success;
+            // 这是什么东西？
             (MemoryPointer cdPtr, uint256 size) = _encodeGenerateOrder(orderParameters, context);
             assembly {
                 success := call(gas(), offerer, 0, cdPtr, size, 0, 0)
@@ -771,6 +780,41 @@ contract OrderValidator is Executor, ZoneInteraction {
         return (orderStatus.isValidated, orderStatus.isCancelled, orderStatus.numerator, orderStatus.denominator);
     }
 
+    function _getLastMatchStatus(bytes32 orderHash)
+        internal
+        view
+        returns (uint120 numerator, uint120 denominator)
+    {
+        LastMatchStatus storage lastMatchStatus = _lastMatchStatus[orderHash];
+
+        return (lastMatchStatus.numerator, lastMatchStatus.denominator);
+    }
+
+    function _storeLastMatchStatus(bytes32 orderHash, uint120 numerator, uint120 denominator)
+        internal
+    {
+        LastMatchStatus storage lastMatchStatus = _lastMatchStatus[orderHash];
+
+        lastMatchStatus.numerator = numerator;
+        lastMatchStatus.denominator = denominator;
+    }
+
+    function _checkLasmMatchStatusExist(bytes32 orderHash) internal {
+        require(_lastMatchStatus[orderHash].denominator == 0, "ongoing match orders already exist");
+    }
+
+    function _restoreOriginalStatus(bytes32 orderHash) internal {
+        OrderStatus storage orderStatus = _orderStatus[orderHash];
+        LastMatchStatus storage lastMatchStatus = _lastMatchStatus[orderHash];
+        // orderStatus.denominator is always equal to lastMatchStatus.denominator
+        if(orderStatus.numerator == lastMatchStatus.numerator) {
+            delete _orderStatus[orderHash];
+        } else {
+            orderStatus.numerator = orderStatus.numerator - lastMatchStatus.numerator;
+        }
+        delete _lastMatchStatus[orderHash];
+    }
+
     /**
      * @dev Internal pure function to either revert or return an empty tuple
      *      depending on the value of `revertOnInvalid`.
@@ -785,7 +829,7 @@ contract OrderValidator is Executor, ZoneInteraction {
     function _revertOrReturnEmpty(bool revertOnInvalid, bytes32 contractOrderHash)
         internal
         pure
-        returns (bytes32 orderHash, uint256 numerator, uint256 denominator)
+        returns (bytes32 orderHash, uint120 numerator, uint120 denominator)
     {
         if (revertOnInvalid) {
             _revertInvalidContractOrder(contractOrderHash);

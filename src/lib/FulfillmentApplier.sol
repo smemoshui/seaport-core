@@ -30,7 +30,8 @@ import {
     OrderParameters_offer_head_offset,
     ReceivedItem_CommonParams_size,
     ReceivedItem_recipient_offset,
-    ReceivedItem_size
+    ReceivedItem_size,
+    ConsiderationItem_recipient_offset
 } from "seaport-types/src/lib/ConsiderationConstants.sol";
 
 import {
@@ -86,7 +87,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
         Execution memory considerationExecution;
 
         // Validate & aggregate consideration items to new Execution object.
-        _aggregateValidFulfillmentConsiderationItems(advancedOrders, considerationComponents, considerationExecution);
+        _aggregateValidFulfillmentConsiderationItems(advancedOrders, considerationComponents, considerationExecution, false);
 
         // Retrieve the consideration item from the execution struct.
         ReceivedItem memory considerationItem = considerationExecution.item;
@@ -105,7 +106,7 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
         // Recipient does not need to be specified because it will always be set
         // to that of the consideration.
         // Validate & aggregate offer items to Execution object.
-        _aggregateValidFulfillmentOfferItems(advancedOrders, offerComponents, execution);
+        _aggregateValidFulfillmentOfferItems(advancedOrders, offerComponents, execution, false);
 
         // Ensure offer & consideration item types, tokens, & identifiers match.
         // (a != b || c != d || e != f) == (((a ^ b) | (c ^ d) | (e ^ f)) != 0),
@@ -119,6 +120,8 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
         ) {
             _revertMismatchedFulfillmentOfferAndConsiderationComponents(fulfillmentIndex);
         }
+
+        // 在这里进行修改 如果是match的话？
 
         // If total consideration amount exceeds the offer amount...
         if (considerationItem.amount > execution.item.amount) {
@@ -199,12 +202,12 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
                 item.recipient = payable(recipient);
 
                 // Return execution for aggregated items provided by offerer.
-                _aggregateValidFulfillmentOfferItems(advancedOrders, fulfillmentComponents, execution);
+                _aggregateValidFulfillmentOfferItems(advancedOrders, fulfillmentComponents, execution, true);
             } else {
                 // Otherwise, fulfillment components are consideration
                 // components. Return execution for aggregated items provided by
                 // the fulfiller.
-                _aggregateValidFulfillmentConsiderationItems(advancedOrders, fulfillmentComponents, execution);
+                _aggregateValidFulfillmentConsiderationItems(advancedOrders, fulfillmentComponents, execution, true);
 
                 // Set the caller as the offerer on the execution.
                 execution.offerer = msg.sender;
@@ -238,7 +241,8 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
     function _aggregateValidFulfillmentOfferItems(
         AdvancedOrder[] memory advancedOrders,
         FulfillmentComponent[] memory offerComponents,
-        Execution memory execution
+        Execution memory execution,
+        bool errorOnZero
     ) internal pure {
         assembly {
             // Declare a variable for the final aggregated item amount.
@@ -392,17 +396,20 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
             if errorBuffer {
                 // If errorBuffer is 1, an item had an amount of zero.
                 if eq(errorBuffer, 1) {
-                    // Store left-padded selector with push4 (reduces bytecode)
-                    // mem[28:32] = selector
-                    mstore(0, MissingItemAmount_error_selector)
+                    if errorOnZero {
+                        // Store left-padded selector with push4, mem[28:32]
+                        mstore(0, MissingItemAmount_error_selector)
 
-                    // revert(abi.encodeWithSignature("MissingItemAmount()"))
-                    revert(Error_selector_offset, MissingItemAmount_error_length)
+                        // revert(abi.encodeWithSignature("MissingItemAmount()"))
+                        revert(Error_selector_offset, MissingItemAmount_error_length)
+                    }
                 }
 
-                // If errorBuffer is not 1 or 0, the sum overflowed.
-                // Panic!
-                throwOverflow()
+                if eq(errorBuffer, 2) {
+                    // If errorBuffer is not 1 or 0, `amount` overflowed.
+                    // Panic!
+                    throwOverflow()
+                }
             }
 
             // Declare function for reverts on invalid fulfillment data.
@@ -450,7 +457,8 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
     function _aggregateValidFulfillmentConsiderationItems(
         AdvancedOrder[] memory advancedOrders,
         FulfillmentComponent[] memory considerationComponents,
-        Execution memory execution
+        Execution memory execution,
+        bool errorOnZero
     ) internal pure {
         // Utilize assembly in order to efficiently aggregate the items.
         assembly {
@@ -569,6 +577,232 @@ contract FulfillmentApplier is FulfillmentApplicationErrors {
                         add(receivedItem, ReceivedItem_recipient_offset),
                         mload(add(considerationItemPtr, ReceivedItem_recipient_offset))
                     )
+
+                    // Calculate the hash of (itemType, token, identifier,
+                    // recipient). This is run after amount is set to zero, so
+                    // there will be one blank word after identifier included in
+                    // the hash buffer.
+                    dataHash := keccak256(considerationItemPtr, ReceivedItem_size)
+
+                    // If component index > 0, swap component pointer with
+                    // pointer to first component so that any remainder after
+                    // fulfillment can be added back to the first item.
+                    let firstFulfillmentHeadPtr := add(considerationComponents, OneWord)
+                    if xor(firstFulfillmentHeadPtr, fulfillmentHeadPtr) {
+                        let firstFulfillmentPtr := mload(firstFulfillmentHeadPtr)
+                        let fulfillmentPtr := mload(fulfillmentHeadPtr)
+                        mstore(firstFulfillmentHeadPtr, fulfillmentPtr)
+                    }
+                }
+                default {
+                    // Compare every subsequent item to the first; the item
+                    // type, token, identifier and recipient must match.
+                    if xor(
+                        dataHash,
+                        // Calculate the hash of (itemType, token, identifier,
+                        // recipient). This is run after amount is set to zero,
+                        // so there will be one blank word after identifier
+                        // included in the hash buffer.
+                        keccak256(considerationItemPtr, ReceivedItem_size)
+                    ) {
+                        // Throw if any of the requirements are not met.
+                        throwInvalidFulfillmentComponentData()
+                    }
+                }
+            }
+
+            // Retrieve ReceivedItem pointer from Execution.
+            let receivedItem := mload(execution)
+
+            // Write final amount to execution.
+            mstore(add(receivedItem, Common_amount_offset), amount)
+
+            // Determine whether the error buffer contains a nonzero error code.
+            if errorBuffer {
+                // If errorBuffer is 1, an item had an amount of zero.
+                if eq(errorBuffer, 1) {
+                    if errorOnZero {
+                        // Store left-padded selector with push4, mem[28:32]
+                        mstore(0, MissingItemAmount_error_selector)
+
+                        // revert(abi.encodeWithSignature("MissingItemAmount()"))
+                        revert(Error_selector_offset, MissingItemAmount_error_length)
+                    }
+                }
+
+                if eq(errorBuffer, 2) {
+                    // If errorBuffer is not 1 or 0, `amount` overflowed.
+                    // Panic!
+                    throwOverflow()
+                }
+            }
+
+            // Declare function for reverts on invalid fulfillment data.
+            function throwInvalidFulfillmentComponentData() {
+                // Store the InvalidFulfillmentComponentData error signature.
+                mstore(0, InvalidFulfillmentComponentData_error_selector)
+
+                // revert(abi.encodeWithSignature(
+                //     "InvalidFulfillmentComponentData()"
+                // ))
+                revert(Error_selector_offset, InvalidFulfillmentComponentData_error_length)
+            }
+
+            // Declare function for reverts due to arithmetic overflows.
+            function throwOverflow() {
+                // Store the Panic error signature.
+                mstore(0, Panic_error_selector)
+                // Store the arithmetic (0x11) panic code.
+                mstore(Panic_error_code_ptr, Panic_arithmetic)
+                // revert(abi.encodeWithSignature("Panic(uint256)", 0x11))
+                revert(Error_selector_offset, Panic_error_length)
+            }
+        }
+    }
+
+        /**
+     * @dev Internal pure function to aggregate a group of consideration items
+     *      using supplied directives on which component items are candidates
+     *      for aggregation, skipping items on orders that are not available.
+     *      Note that this function depends on memory layout affected by an
+     *      earlier call to _validateOrdersAndPrepareToFulfill.  The memory for
+     *      the consideration arrays needs to be updated before calling
+     *      _aggregateValidFulfillmentConsiderationItems.
+     *      _validateOrdersAndPrepareToFulfill is called in _matchAdvancedOrders
+     *      and _fulfillAvailableAdvancedOrders in the current version.
+     *
+     * @param advancedOrders          The orders to aggregate consideration
+     *                                items from.
+     * @param considerationComponents An array of FulfillmentComponent structs
+     *                                indicating the order index and item index
+     *                                of each candidate consideration item for
+     *                                aggregation.
+     * @param execution               The execution to apply the aggregation to.
+     */
+    function _aggregateValidFulfillmentConsiderationItemsWithStartAmounts(
+        AdvancedOrder[] memory advancedOrders,
+        FulfillmentComponent[] memory considerationComponents,
+        Execution memory execution
+    ) internal pure returns (uint256 considerationStartAmounts) {
+        // Utilize assembly in order to efficiently aggregate the items.
+        assembly {
+            // Declare a variable for the final aggregated item amount.
+            let amount
+
+            // Create variable to track errors encountered with amount.
+            let errorBuffer
+
+            // Declare variable for hash(itemType, token, identifier, recipient)
+            let dataHash
+
+            // Iterate over each consideration component.
+            for {
+                // Track position in considerationComponents head.
+                let fulfillmentHeadPtr := considerationComponents
+
+                // Get position one word past last element in head of array.
+                let endPtr := add(considerationComponents, shl(OneWordShift, mload(considerationComponents)))
+            } lt(fulfillmentHeadPtr, endPtr) {} {
+                // Increment position in considerationComponents head.
+                fulfillmentHeadPtr := add(fulfillmentHeadPtr, OneWord)
+
+                // Retrieve the order index using the fulfillment pointer.
+                let orderIndex := mload(mload(fulfillmentHeadPtr))
+
+                // Ensure that the order index is not out of range.
+                if iszero(lt(orderIndex, mload(advancedOrders))) { throwInvalidFulfillmentComponentData() }
+
+                // Read advancedOrders[orderIndex] pointer from its array head.
+                let orderPtr :=
+                    mload(
+                        // Calculate head position of advancedOrders[orderIndex].
+                        add(add(advancedOrders, OneWord), shl(OneWordShift, orderIndex))
+                    )
+
+                // Retrieve item index using an offset of fulfillment pointer.
+                let itemIndex := mload(add(mload(fulfillmentHeadPtr), Fulfillment_itemIndex_offset))
+
+                let considerationItemPtr
+                {
+                    // Load consideration array pointer.
+                    let considerationArrPtr :=
+                        mload(
+                            add(
+                                // Read OrderParameters pointer from AdvancedOrder.
+                                mload(orderPtr),
+                                OrderParameters_consideration_head_offset
+                            )
+                        )
+
+                    // If the consideration item index is out of range or the
+                    // numerator is zero, skip this item.
+                    if or(
+                        iszero(lt(itemIndex, mload(considerationArrPtr))),
+                        iszero(mload(add(orderPtr, AdvancedOrder_numerator_offset)))
+                    ) { continue }
+
+                    // Retrieve consideration item pointer using the item index.
+                    considerationItemPtr :=
+                        mload(
+                            add(
+                                // Get pointer to beginning of receivedItem.
+                                add(considerationArrPtr, OneWord),
+                                // Calculate offset to pointer for desired order.
+                                shl(OneWordShift, itemIndex)
+                            )
+                        )
+                }
+
+                // Declare a separate scope for the amount update.
+                {
+                    // Retrieve amount pointer using consideration item pointer.
+                    let amountPtr := add(considerationItemPtr, Common_amount_offset)
+
+                    // Add consideration item amount to execution amount.
+                    let newAmount := add(amount, mload(amountPtr))
+
+                    // Update error buffer:
+                    // 1 = zero amount, 2 = overflow, 3 = both.
+                    errorBuffer := or(errorBuffer, or(shl(1, lt(newAmount, amount)), iszero(mload(amountPtr))))
+
+                    // Update the amount to the new, summed amount.
+                    amount := newAmount
+
+                    // Zero out original item amount to indicate it is credited.
+                    mstore(amountPtr, 0)
+                }
+
+                // Retrieve ReceivedItem pointer from Execution.
+                let receivedItem := mload(execution)
+
+                switch iszero(dataHash)
+                case 1 {
+                    // On first valid item, populate the received item in
+                    // memory for later comparison.
+
+                    // Set the item type on the received item.
+                    mstore(receivedItem, mload(considerationItemPtr))
+
+                    // Set the token on the received item.
+                    mstore(
+                        add(receivedItem, Common_token_offset), mload(add(considerationItemPtr, Common_token_offset))
+                    )
+
+                    // Set the identifier on the received item.
+                    mstore(
+                        add(receivedItem, Common_identifier_offset),
+                        mload(add(considerationItemPtr, Common_identifier_offset))
+                    )
+
+                    // Set the recipient on the received item. Note that this
+                    // depends on the memory layout established by the
+                    // _validateOrdersAndPrepareToFulfill function.
+                    mstore(
+                        add(receivedItem, ReceivedItem_recipient_offset),
+                        mload(add(considerationItemPtr, ReceivedItem_recipient_offset))
+                    )
+
+                    considerationStartAmounts := mload(add(considerationItemPtr, ConsiderationItem_recipient_offset))
 
                     // Calculate the hash of (itemType, token, identifier,
                     // recipient). This is run after amount is set to zero, so

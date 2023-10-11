@@ -48,6 +48,36 @@ import {
     _revertUnusedItemParameters
 } from "seaport-types/src/lib/ConsiderationErrors.sol";
 
+interface IERC20 {
+    /**
+     * @dev Emitted when `value` tokens are moved from one account (`from`) to
+     * another (`to`).
+     *
+     * Note that `value` may be zero.
+     */
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    /**
+     * @dev Moves `amount` tokens from the caller's account to `to`.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transfer(address to, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Moves `amount` tokens from `from` to `to` using the
+     * allowance mechanism. `amount` is then deducted from the caller's
+     * allowance.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+}
+
 /**
  * @title Executor
  * @author 0age
@@ -485,6 +515,54 @@ contract Executor is Verifiers, TokenTransferrer {
             mstore(add(itemPointer, Conduit_transferItem_to_ptr), to)
             mstore(add(itemPointer, Conduit_transferItem_identifier_ptr), identifier)
             mstore(add(itemPointer, Conduit_transferItem_amount_ptr), amount)
+        }
+    }
+
+    function _transferFromPool(ReceivedItem memory item, address from, bytes32 _mockConduitKey, bytes memory _mockAccumulator) internal {
+        // If the item type indicates Ether or a native token...
+        if (item.itemType == ItemType.NATIVE) {
+            // Ensure neither the token nor the identifier parameters are set.
+            if ((uint160(item.token) | item.identifier) != 0) {
+                _revertUnusedItemParameters();
+            }
+
+            // transfer the native tokens to the recipient.
+            _transferNativeTokens(item.recipient, item.amount);
+        } else if (item.itemType == ItemType.ERC20) {
+            // Ensure that no identifier is supplied.
+            if (item.identifier != 0) {
+                _revertUnusedItemParameters();
+            }
+
+            // Transfer ERC20 tokens from the source to the recipient.
+            safeTransferERC20(item.token, from, item.recipient, item.amount);
+        } else if (item.itemType == ItemType.ERC721) {
+            if (item.amount != 1) {
+                _revertInvalidERC721TransferAmount(item.amount);
+            }
+
+            // Perform transfer via the token contract directly.
+            _performERC721Transfer(item.token, from, item.recipient, item.identifier);
+        } else {
+            // Transfer ERC1155 token from the source to the recipient.
+            _performERC1155Transfer(item.token, from, item.recipient, item.identifier, item.amount);
+        }
+    }
+
+    function safeTransferERC20(
+        address _currency,
+        address _from,
+        address _to,
+        uint256 _amount
+    ) internal {
+        if (_from == _to) {
+            return;
+        }
+
+        if (_from == address(this)) {
+            IERC20(_currency).transfer(_to, _amount);
+        } else {
+            IERC20(_currency).transferFrom(_from, _to, _amount);
         }
     }
 }
