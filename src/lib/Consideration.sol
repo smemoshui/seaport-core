@@ -340,7 +340,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         _vrf_controller = vrfController;
     }
 
-    function onERC1155Received(address operator, address from, uint256 id, uint256 value, bytes calldata data) external override returns (bytes4) {
+    function onERC1155Received(address operator, address from, uint256 id, uint256 value, bytes calldata data) external returns (bytes4) {
         return this.onERC1155Received.selector;
     }
 }
