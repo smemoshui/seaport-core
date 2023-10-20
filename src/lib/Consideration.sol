@@ -70,6 +70,8 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         _vrf_controller = address(0xC619D985a88e341B618C23a543B8Efe2c55D1b37);
     }
 
+    event MatchSuccessOrNot(uint256 requestId, bool isSuccess);
+
     /**
      * @notice Accept native token transfers during execution that may then be
      *         used to facilitate native token transfers, where any tokens that
@@ -139,6 +141,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
             }
         }
         delete originalOrderHashes[requestId];
+        emit MatchSuccessOrNot(requestId, !returnBack);
         return executions;
     }
 
