@@ -58,6 +58,7 @@ interface IVRFInterface {
 contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     address private _vrf_controller;
     mapping(uint256 => bytes32[]) private originalOrderHashes;
+    mapping(address => bool) private members;
     /**
      * @notice Derive and set hashes, reference chainId, and associated domain
      *         separator during deployment.
@@ -69,6 +70,8 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
     constructor(address conduitController) OrderCombiner(conduitController) {
         _vrf_controller = address(0xC619D985a88e341B618C23a543B8Efe2c55D1b37);
     }
+
+    event MatchSuccessOrNot(uint256 requestId, bool isSuccess);
 
     /**
      * @notice Accept native token transfers during execution that may then be
@@ -121,7 +124,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         Fulfillment[] calldata,
         uint256 requestId,
         OrderProbility[] calldata orderProbility
-    ) external payable override returns (Execution[] memory /* executions */ ) {
+    ) onlyMembers external payable override returns (Execution[] memory /* executions */ ) {
         bytes32[] memory existingOrderHahes = originalOrderHashes[requestId];
         (Execution[] memory executions, bool returnBack) = _matchAdvancedOrdersWithRandom(
             _toAdvancedOrdersReturnType(_decodeOrdersAsAdvancedOrders)(CalldataStart.pptr()),
@@ -139,6 +142,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
             }
         }
         delete originalOrderHashes[requestId];
+        emit MatchSuccessOrNot(requestId, !returnBack);
         return executions;
     }
 
@@ -150,7 +154,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         uint256[] calldata premiumOrdersIndex,
         address[] calldata recipients,
         uint32 numWords
-    ) external payable override returns (uint256) {
+    ) onlyMembers external payable override returns (uint256)  {
         (
             Execution[] memory executions,
             bytes32[] memory orderHashes
@@ -327,8 +331,8 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
         return _name();
     }
 
-    modifier onlyVRF() {
-        require(msg.sender == vrfOwner(), "Only vrf address can call the match with lucky");
+    modifier onlyMembers() {
+        require(members[msg.sender], "Only members can call the match with lucky");
         _;
     }
 
@@ -338,5 +342,17 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
 
     function updateVRFAddress(address vrfController) public onlyOwner {
         _vrf_controller = vrfController;
+    }
+
+    function addMember(address addr) public onlyOwner {
+        members[addr] = true;
+    }
+
+    function removeMember(address addr) public onlyOwner {
+        delete members[addr];
+    }
+
+    function onERC1155Received(address operator, address from, uint256 id, uint256 value, bytes calldata data) external returns (bytes4) {
+        return this.onERC1155Received.selector;
     }
 }
