@@ -151,8 +151,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 (uint256 numerator, uint256 denominator) = _getLastMatchStatus(orderHash);
                 (uint256 luckyNumerator, uint256 luckyDenominator) = checkIfProbilityExists(orderProbility, orderHash);
 
-                console.log("orderHashes exist and pass the checks");
-
                 // Do not track hash or adjust prices if order is not fulfilled.
                 if (numerator == 0) {
                     // Mark fill fraction as zero if the order is not fulfilled.
@@ -424,7 +422,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 // Validate it, update status, and determine fraction to fill.
                 (bytes32 orderHash, uint120 numerator, uint120 denominator) =
                     _validateOrderAndUpdateStatus(advancedOrder, revertOnInvalid);
-                console.log("orderHash calculated and updated numerator&denominator");
                 // Do not track hash or adjust prices if order is not fulfilled.
                 if (numerator == 0) {
                     // Mark fill fraction as zero if the order is not fulfilled.
@@ -657,7 +654,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 }
             }
         }
-        console.log("Finish execution process");
         // Determine whether any native token balance remains.
         uint256 remainingNativeTokenBalance;
         assembly {
@@ -996,7 +992,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
 
         // Allocate executions by fulfillment and apply them to each execution.
         executions = new Execution[](totalFulfillments);
-        console.log("Start building execution according to the fulfillments");
         // Skip overflow checks as all for loops are indexed starting at zero.
         unchecked {
             // Track number of filtered executions.
@@ -1037,7 +1032,6 @@ contract OrderCombiner is OrderFulfiller, FulfillmentApplier {
                 }
             }
         }
-        console.log("Finish execution building process");
         // change offer instead of recipient
         // Perform final checks and execute orders.
         bool returnBack = _performFinalChecksAndExecuteOrdersWithRandom(advancedOrders, executions, orderHashes);

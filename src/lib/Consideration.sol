@@ -132,10 +132,8 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
             existingOrderHahes,
             orderProbility
         );
-        console.log("Match and execution process finished");
         // change this if need partial fulfillment
         if(returnBack) {
-            console.log("Match failed and clear status");
             uint256 totalLength = existingOrderHahes.length;
             for(uint256 i = 0; i < totalLength; ++i) {
                 _restoreOriginalStatus(existingOrderHahes[i]);
@@ -163,9 +161,7 @@ contract Consideration is ConsiderationInterface, OrderCombiner, Ownable {
             premiumOrdersIndex,
             recipients
         );
-        console.log("Finish prepare and to request VRF");
         uint256 requestId = IVRFInterface(_vrf_controller).requestRandomWords(numWords);
-        console.log("Requested id is ", requestId);
         // clear reetrancy guard
         _clearReentrancyGuard();
         originalOrderHashes[requestId] = orderHashes;
